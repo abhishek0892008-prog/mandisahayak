@@ -1,1083 +1,492 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { crops, centreCropIds } from "../../data/crops";
 
+import api, { newIdempotencyKey } from "../../lib/api";
+import useApiResource from "../../hooks/useApiResource";
+import { filterCrops } from "../../data/crops";
+import { translateError, translateReason } from "../../lib/codes";
+import {
+  formatDate,
+  formatMinutes,
+  formatTimeRange,
+  quintalToKg,
+  todayInZone,
+} from "../../lib/format";
+import FarmerLayout from "../../components/FarmerLayout";
+import { DataTypeNote, ErrorState, Loading } from "../../components/StateViews";
+
+/**
+ * Slot booking.
+ *
+ * The prototype offered four fixed time slots with invented seat counts and
+ * generated its own booking id. None of that survives contact with the real
+ * engine, where capacity is *time on a lane* sized to the quantity, the
+ * earliest fitting window is computed server-side, and both the booking code
+ * and the token are minted by the server (bookings.md §3, §5.1).
+ *
+ * So the flow is: describe what you are bringing, ask the server what it can
+ * offer, then take it or not. The client proposes nothing.
+ */
 function BookSlot() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
 
-  const [centre, setCentre] = useState("");
   const [cropId, setCropId] = useState("");
-  const [cropSearch, setCropSearch] = useState("");
-  const [showCropList, setShowCropList] = useState(false);
-  const [voiceListening, setVoiceListening] = useState(false);
-  const [voiceMessage, setVoiceMessage] = useState("");
-  const [voiceSuggestion, setVoiceSuggestion] = useState(null);
-  const [quantity, setQuantity] = useState("");
-  const [quantityError, setQuantityError] = useState("");
-  const [date, setDate] = useState("");
-  const [timeSlot, setTimeSlot] = useState("");
-  const [showReview, setShowReview] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
+  const [cropQuery, setCropQuery] = useState("");
+  const [cropListOpen, setCropListOpen] = useState(false);
+  const [centreId, setCentreId] = useState("");
+  const [quantityQuintal, setQuantityQuintal] = useState("");
+  const [preferredDate, setPreferredDate] = useState("");
 
-  const today = new Date().toISOString().split("T")[0];
+  const [offer, setOffer] = useState(null);
+  const [searching, setSearching] = useState(false);
+  const [booking, setBooking] = useState(false);
+  const [error, setError] = useState(null);
+  const [fieldError, setFieldError] = useState(null);
 
-  const centres = [
-    "Procurement Centre 1",
-    "Procurement Centre 2",
-    "Procurement Centre 3",
-  ];
+  const cropBoxRef = useRef(null);
 
-  const slots = [
-    {
-      time: "09:00 AM - 10:00 AM",
-      available: 6,
-    },
-    {
-      time: "10:00 AM - 11:00 AM",
-      available: 0,
-    },
-    {
-      time: "11:00 AM - 12:00 PM",
-      available: 3,
-    },
-    {
-      time: "02:00 PM - 03:00 PM",
-      available: 8,
-    },
-  ];
+  // One key per prepared booking. Reused across retries of the same request so
+  // a double submit replays the stored response instead of booking twice
+  // (bookings.md §5.2), and regenerated whenever the request changes.
+  const idempotencyKey = useRef(newIdempotencyKey());
 
-  const availableCrops = useMemo(() => {
-    const ids = centreCropIds[centre] || [];
+  const crops = useApiResource((signal) => api.crops(signal), []);
+  const constraints = useApiResource((signal) => api.bookingConstraints(signal), []);
 
-    return ids
-      .map((id) => crops.find((item) => item.id === id))
-      .filter(Boolean);
-  }, [centre]);
-
-  const selectedCrop = availableCrops.find(
-    (item) => item.id === cropId
+  // Centres are filtered by crop on the server, which owns the eligibility
+  // rule. Matching crop names against a centre's accepted list in the browser
+  // would be a second, divergent copy of that rule.
+  const centres = useApiResource(
+    (signal) => api.centres({ cropId }, signal),
+    [cropId],
+    { enabled: Boolean(cropId) },
   );
 
-  const normalizeText = (value) => {
-    return value
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^\p{L}\p{N}\s]/gu, "")
-      .replace(/\s+/g, " ")
-      .trim();
-  };
+  const quantity = constraints.data?.quantity ?? null;
+  const locale = i18n.language;
 
-  const filteredCrops = useMemo(() => {
-    const query = normalizeText(cropSearch);
+  const selectedCrop = (crops.data ?? []).find((crop) => crop.id === cropId) ?? null;
+  const selectedCentre = (centres.data ?? []).find((centre) => centre.id === centreId) ?? null;
 
-    if (!query) {
-      return availableCrops;
-    }
+  const visibleCrops = useMemo(
+    () => filterCrops(crops.data ?? [], cropQuery),
+    [crops.data, cropQuery],
+  );
 
-    return availableCrops.filter((item) => {
-      const values = [
-        item.en,
-        item.hi,
-        ...item.aliases,
-      ].map(normalizeText);
+  const centreZone = selectedCentre?.timezone ?? "Asia/Kolkata";
+  const minDate = todayInZone(centreZone);
 
-      return values.some((value) => value.includes(query));
-    });
-  }, [availableCrops, cropSearch]);
+  // Closes the crop dropdown on an outside click.
+  useEffect(() => {
+    if (!cropListOpen) return undefined;
 
-  const levenshteinDistance = (a, b) => {
-    const matrix = Array.from(
-      { length: b.length + 1 },
-      () => Array(a.length + 1).fill(0)
-    );
-
-    for (let i = 0; i <= b.length; i += 1) {
-      matrix[i][0] = i;
-    }
-
-    for (let j = 0; j <= a.length; j += 1) {
-      matrix[0][j] = j;
-    }
-
-    for (let i = 1; i <= b.length; i += 1) {
-      for (let j = 1; j <= a.length; j += 1) {
-        if (b[i - 1] === a[j - 1]) {
-          matrix[i][j] = matrix[i - 1][j - 1];
-        } else {
-          matrix[i][j] = Math.min(
-            matrix[i - 1][j] + 1,
-            matrix[i][j - 1] + 1,
-            matrix[i - 1][j - 1] + 1
-          );
-        }
+    function onPointerDown(event) {
+      if (cropBoxRef.current && !cropBoxRef.current.contains(event.target)) {
+        setCropListOpen(false);
       }
     }
 
-    return matrix[b.length][a.length];
-  };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [cropListOpen]);
 
-  const findCropFromSpeech = (spokenText) => {
-    const normalizedSpeech = normalizeText(spokenText);
+  /** Any change to the request invalidates the offer it produced. */
+  function invalidateOffer() {
+    setOffer(null);
+    setError(null);
+    idempotencyKey.current = newIdempotencyKey();
+  }
 
-    if (!normalizedSpeech) {
-      return null;
+  function validate() {
+    if (!cropId) return t("codes.fieldErrors.CROP_ID_INVALID");
+    if (!centreId) return t("codes.fieldErrors.CENTRE_ID_INVALID");
+
+    const value = Number(quantityQuintal);
+
+    if (!quantityQuintal || !Number.isFinite(value)) {
+      return t("codes.fieldErrors.QUANTITY_NOT_INTEGER");
     }
 
-    const exactMatch = availableCrops.find((item) => {
-      const values = [
-        item.en,
-        item.hi,
-        ...item.aliases,
-      ].map(normalizeText);
+    if (quantity) {
+      if (quantity.integerOnly && !Number.isInteger(value)) {
+        return t("codes.fieldErrors.QUANTITY_NOT_INTEGER");
+      }
 
-      return values.includes(normalizedSpeech);
-    });
-
-    if (exactMatch) {
-      return {
-        crop: exactMatch,
-        confidence: "exact",
-      };
-    }
-
-    const containsMatches = availableCrops.filter((item) => {
-      const values = [
-        item.en,
-        item.hi,
-        ...item.aliases,
-      ].map(normalizeText);
-
-      return values.some(
-        (value) =>
-          value.length >= 3 &&
-          (normalizedSpeech.includes(value) ||
-            value.includes(normalizedSpeech))
-      );
-    });
-
-    if (containsMatches.length > 0) {
-      const bestContainsMatch = containsMatches.sort((a, b) => {
-        const aLength = Math.max(
-          a.en.length,
-          a.hi.length,
-          ...a.aliases.map((alias) => alias.length)
-        );
-
-        const bLength = Math.max(
-          b.en.length,
-          b.hi.length,
-          ...b.aliases.map((alias) => alias.length)
-        );
-
-        return bLength - aLength;
-      })[0];
-
-      return {
-        crop: bestContainsMatch,
-        confidence: "suggestion",
-      };
-    }
-
-    let bestCrop = null;
-    let bestDistance = Infinity;
-
-    availableCrops.forEach((item) => {
-      const values = [
-        item.en,
-        item.hi,
-        ...item.aliases,
-      ].map(normalizeText);
-
-      values.forEach((value) => {
-        if (value.length < 3) {
-          return;
-        }
-
-        const distance = levenshteinDistance(
-          normalizedSpeech,
-          value
-        );
-
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          bestCrop = item;
-        }
-      });
-    });
-
-    const threshold =
-      normalizedSpeech.length <= 5
-        ? 2
-        : Math.min(4, Math.floor(normalizedSpeech.length / 3));
-
-    if (bestCrop && bestDistance <= threshold) {
-      return {
-        crop: bestCrop,
-        confidence: "suggestion",
-      };
+      if (value < quantity.minQuintal) return t("codes.fieldErrors.QUANTITY_BELOW_MINIMUM");
+      if (value > quantity.maxQuintal) return t("codes.fieldErrors.QUANTITY_ABOVE_MAXIMUM");
     }
 
     return null;
-  };
-
-  const startVoiceSearch = () => {
-    setVoiceMessage("");
-    setVoiceSuggestion(null);
-
-    if (!centre) {
-      setVoiceMessage(t("selectCentreFirst"));
-      return;
-    }
-
-    const SpeechRecognition =
-      window.SpeechRecognition ||
-      window.webkitSpeechRecognition;
-
-    if (!SpeechRecognition) {
-      setVoiceMessage(t("voiceNotSupported"));
-      return;
-    }
-
-    const recognition = new SpeechRecognition();
-
-    recognition.lang =
-      i18n.language === "hi" ? "hi-IN" : "en-IN";
-
-    recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 5;
-
-    setVoiceListening(true);
-
-    recognition.onresult = (event) => {
-      const results = Array.from(event.results || []);
-
-      const transcripts = results.flatMap((result) =>
-        Array.from(result || []).map(
-          (alternative) => alternative.transcript
-        )
-      );
-
-      let match = null;
-
-      for (const transcript of transcripts) {
-        match = findCropFromSpeech(transcript);
-
-        if (match) {
-          break;
-        }
-      }
-
-      if (!match) {
-        setVoiceMessage(t("voiceInvalid"));
-        return;
-      }
-
-      const cropItem = match.crop;
-
-      if (match.confidence === "exact") {
-        setCropId(cropItem.id);
-        setCropSearch("");
-        setShowCropList(false);
-        setVoiceSuggestion(null);
-        setVoiceMessage(
-          `${t("voiceSelected")}: ${
-            i18n.language === "hi"
-              ? cropItem.hi
-              : cropItem.en
-          }`
-        );
-        return;
-      }
-
-      setVoiceSuggestion(cropItem);
-      setVoiceMessage(
-        `${t("voiceSuggestion")}: ${
-          i18n.language === "hi"
-            ? cropItem.hi
-            : cropItem.en
-        }`
-      );
-    };
-
-    recognition.onerror = () => {
-      setVoiceMessage(t("voiceInvalid"));
-      setVoiceListening(false);
-    };
-
-    recognition.onend = () => {
-      setVoiceListening(false);
-    };
-
-    recognition.start();
-  };
-
-  const selectSuggestedCrop = () => {
-    if (!voiceSuggestion) {
-      return;
-    }
-
-    setCropId(voiceSuggestion.id);
-    setCropSearch("");
-    setShowCropList(false);
-    setVoiceMessage(
-      `${t("voiceSelected")}: ${
-        i18n.language === "hi"
-          ? voiceSuggestion.hi
-          : voiceSuggestion.en
-      }`
-    );
-    setVoiceSuggestion(null);
-  };
-
-  const changeLanguage = (language) => {
-    i18n.changeLanguage(language);
-  };
-
-  const handleCentreChange = (value) => {
-    setCentre(value);
-    setCropId("");
-    setCropSearch("");
-    setShowCropList(false);
-    setVoiceMessage("");
-    setVoiceSuggestion(null);
-    setTimeSlot("");
-  };
-
-  const handleQuantityChange = (value) => {
-    setQuantity(value);
-
-    if (value === "") {
-      setQuantityError("");
-      return;
-    }
-
-    const number = Number(value);
-
-    if (
-      !Number.isInteger(number) ||
-      number < 1 ||
-      number > 50
-    ) {
-      setQuantityError(
-        t("maxQuantity") ||
-          "Enter a quantity between 1 and 50 quintals."
-      );
-    } else {
-      setQuantityError("");
-    }
-  };
-
-  const handleReview = (e) => {
-    e.preventDefault();
-
-    const quantityNumber = Number(quantity);
-
-    if (
-      !centre ||
-      !cropId ||
-      !quantity ||
-      !date ||
-      !timeSlot
-    ) {
-      return;
-    }
-
-    if (
-      !Number.isInteger(quantityNumber) ||
-      quantityNumber < 1 ||
-      quantityNumber > 50
-    ) {
-      setQuantityError(
-        t("maxQuantity") ||
-          "Enter a quantity between 1 and 50 quintals."
-      );
-      return;
-    }
-
-    setShowReview(true);
-  };
-
-  const handleConfirm = () => {
-    const farmerData = JSON.parse(
-      localStorage.getItem("farmerData") || "null"
-    );
-
-    const quantityNumber = Number(quantity);
-
-    const newBooking = {
-      bookingId: `FQ-${Math.floor(1000 + Math.random() * 9000)}`,
-      centre,
-      crop: selectedCrop?.en || "",
-      cropHindi: selectedCrop?.hi || "",
-      cropId: selectedCrop?.id || "",
-      quantity: quantityNumber,
-      quantityQuintal: quantityNumber,
-      quantityUnit: "quintal",
-      date,
-      timeSlot,
-      status: "Confirmed",
-      createdAt: new Date().toISOString(),
-      farmerPhone: farmerData?.phone || "",
-    };
-
-    const existingBookings = JSON.parse(
-      localStorage.getItem("bookings") || "[]"
-    );
-
-    const migratedBookings =
-      existingBookings.length > 0
-        ? existingBookings
-        : (() => {
-            const oldBooking = JSON.parse(
-              localStorage.getItem("bookingData") || "null"
-            );
-
-            return oldBooking ? [oldBooking] : [];
-          })();
-
-    const updatedBookings = [
-      ...migratedBookings,
-      newBooking,
-    ];
-
-    localStorage.setItem(
-      "bookings",
-      JSON.stringify(updatedBookings)
-    );
-
-    localStorage.setItem(
-      "bookingData",
-      JSON.stringify(newBooking)
-    );
-
-    window.dispatchEvent(new Event("bookingUpdated"));
-
-    setShowSuccess(true);
-
-    setTimeout(() => {
-      navigate("/dashboard");
-    }, 1800);
-  };
-
-  useEffect(() => {
-    const closeDropdown = (event) => {
-      if (!event.target.closest("[data-crop-picker]")) {
-        setShowCropList(false);
-      }
-    };
-
-    document.addEventListener("click", closeDropdown);
-
-    return () => {
-      document.removeEventListener("click", closeDropdown);
-    };
-  }, []);
-
-  if (showSuccess) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-green-700 px-6">
-        <div className="w-full max-w-sm text-center text-white">
-          <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-white">
-            <div className="text-6xl font-bold text-green-700">
-              ✓
-            </div>
-          </div>
-
-          <h1 className="mt-6 text-2xl font-bold">
-            {t("bookingConfirmedTitle")}
-          </h1>
-
-          <p className="mt-2 text-sm leading-6 text-green-100">
-            {t("bookingConfirmedMessage")}
-          </p>
-
-          <p className="mt-6 text-sm text-green-100">
-            {t("redirectingToDashboard")}
-          </p>
-        </div>
-      </div>
-    );
   }
 
-  if (showReview) {
-    return (
-      <div className="min-h-screen bg-slate-50">
-        <header className="bg-green-700 text-white">
-          <div className="mx-auto w-full max-w-lg px-4 py-4">
-            <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => setShowReview(false)}
-                className="flex h-10 w-10 items-center justify-center rounded-full text-2xl hover:bg-white/10"
-              >
-                ←
-              </button>
+  async function handleCheckAvailability(event) {
+    event.preventDefault();
 
-              <div className="flex items-center rounded-full bg-white/15 p-1">
-                <button
-                  type="button"
-                  onClick={() => changeLanguage("en")}
-                  className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                    i18n.language === "en"
-                      ? "bg-white text-green-700"
-                      : "text-white"
-                  }`}
-                >
-                  {t("english")}
-                </button>
+    const invalid = validate();
 
-                <button
-                  type="button"
-                  onClick={() => changeLanguage("hi")}
-                  className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                    i18n.language === "hi"
-                      ? "bg-white text-green-700"
-                      : "text-white"
-                  }`}
-                >
-                  {t("hindi")}
-                </button>
-              </div>
-            </div>
+    if (invalid) {
+      setFieldError(invalid);
+      return;
+    }
 
-            <div className="pb-2 pt-5">
-              <h1 className="text-2xl font-bold">
-                {t("reviewBooking")}
-              </h1>
+    setFieldError(null);
+    setError(null);
+    setSearching(true);
+    setOffer(null);
 
-              <p className="mt-1 text-sm text-green-100">
-                {t("reviewBookingDescription")}
-              </p>
-            </div>
-          </div>
-        </header>
+    try {
+      const result = await api.availability({
+        centreId,
+        cropId,
+        quantityKg: quintalToKg(quantityQuintal, quantity?.kgPerQuintal ?? 100),
+        fromDate: preferredDate || undefined,
+      });
 
-        <main className="mx-auto w-full max-w-lg px-4 py-5">
-          <div className="rounded-2xl bg-white p-5 shadow-sm">
-            <div className="mb-5 rounded-xl bg-green-50 p-4">
-              <p className="text-xs font-medium text-green-700">
-                {t("booking")}
-              </p>
-
-              <p className="mt-1 text-lg font-bold text-slate-900">
-                {date}
-              </p>
-
-              <p className="mt-1 text-sm text-slate-600">
-                {timeSlot}
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
-                <span className="text-sm text-slate-500">
-                  {t("procurementCentre")}
-                </span>
-
-                <span className="text-right text-sm font-semibold text-slate-900">
-                  {centre}
-                </span>
-              </div>
-
-              <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
-                <span className="text-sm text-slate-500">
-                  {t("crop")}
-                </span>
-
-                <span className="text-right text-sm font-semibold text-slate-900">
-                  {selectedCrop
-                    ? i18n.language === "hi"
-                      ? selectedCrop.hi
-                      : selectedCrop.en
-                    : ""}
-                </span>
-              </div>
-
-              <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
-                <span className="text-sm text-slate-500">
-                  {t("quantity")}
-                </span>
-
-                <span className="text-right text-sm font-semibold text-slate-900">
-                  {quantity} {t("quintal") || "Quintal"}
-                </span>
-              </div>
-
-              <div className="flex items-start justify-between gap-4">
-                <span className="text-sm text-slate-500">
-                  {t("timeSlot")}
-                </span>
-
-                <span className="text-right text-sm font-semibold text-slate-900">
-                  {timeSlot}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 rounded-2xl border border-amber-100 bg-amber-50 p-4">
-            <div className="flex gap-3">
-              <span className="text-xl">ℹ️</span>
-
-              <p className="text-sm leading-5 text-amber-800">
-                Please check your booking details carefully before confirming.
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleConfirm}
-            className="mt-5 min-h-12 w-full rounded-xl bg-green-700 px-4 py-3 text-sm font-semibold text-white hover:bg-green-800"
-          >
-            {t("confirmBooking")} ✓
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setShowReview(false)}
-            className="mt-3 min-h-12 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700"
-          >
-            {t("back")}
-          </button>
-        </main>
-      </div>
-    );
+      setOffer(result);
+    } catch (searchError) {
+      setError(searchError);
+    } finally {
+      setSearching(false);
+    }
   }
+
+  async function handleConfirm() {
+    setBooking(true);
+    setError(null);
+
+    try {
+      const created = await api.createBooking(
+        {
+          centreId,
+          cropId,
+          quantityKg: quintalToKg(quantityQuintal, quantity?.kgPerQuintal ?? 100),
+          preferredDate: preferredDate || undefined,
+        },
+        idempotencyKey.current,
+      );
+
+      // The confirmation screen renders the server's response. Nothing about
+      // this booking is reconstructed client-side.
+      navigate("/booking-confirmation", { replace: true, state: { booking: created } });
+    } catch (bookError) {
+      setError(bookError);
+
+      // The window was taken mid-flight; the offer is stale, so the farmer must
+      // ask again rather than retry against a window that no longer exists.
+      if (bookError?.code === "SLOT_NO_LONGER_AVAILABLE") {
+        setOffer(null);
+        idempotencyKey.current = newIdempotencyKey();
+      }
+    } finally {
+      setBooking(false);
+    }
+  }
+
+  const card = "rounded-2xl bg-white p-4 shadow-sm";
+  const control =
+    "min-h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100";
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-slate-50">
-      <header className="bg-green-700 text-white">
-        <div className="mx-auto w-full max-w-lg px-4 py-4">
-          <div className="flex items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={() => navigate("/dashboard")}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-2xl hover:bg-white/10"
-            >
-              ←
-            </button>
+    <FarmerLayout
+      title={t("bookSlot")}
+      subtitle={t("chooseCentreCropTime")}
+      onBack={() => navigate("/dashboard")}
+    >
+      {(crops.error || constraints.error) && (
+        <ErrorState
+          error={crops.error ?? constraints.error}
+          className="mb-4"
+          onRetry={() => {
+            crops.reload();
+            constraints.reload();
+          }}
+        />
+      )}
 
-            <div className="flex shrink-0 items-center rounded-full bg-white/15 p-1">
-              <button
-                type="button"
-                onClick={() => changeLanguage("en")}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                  i18n.language === "en"
-                    ? "bg-white text-green-700"
-                    : "text-white"
-                }`}
-              >
-                {t("english")}
-              </button>
+      {crops.initialLoading && <Loading />}
 
-              <button
-                type="button"
-                onClick={() => changeLanguage("hi")}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                  i18n.language === "hi"
-                    ? "bg-white text-green-700"
-                    : "text-white"
-                }`}
-              >
-                {t("hindi")}
-              </button>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 pb-2 pt-5">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/15 text-xl">
-              📅
-            </div>
-
-            <div>
-              <h1 className="text-2xl font-bold">
-                {t("bookSlot")}
-              </h1>
-
-              <p className="mt-1 text-sm text-green-100">
-                {t("chooseCentreCropTime")}
-              </p>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto w-full max-w-lg px-4 py-5">
-        <form onSubmit={handleReview} className="space-y-4">
-          <section className="rounded-2xl bg-white p-4 shadow-sm">
-            <div className="mb-4 flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-50 text-lg">
-                📍
-              </div>
-
-              <div>
-                <h2 className="font-semibold text-slate-900">
-                  {t("procurementCentre")}
-                </h2>
-
-                <p className="text-xs text-slate-500">
-                  {t("selectCentreDescription")}
-                </p>
-              </div>
-            </div>
-
-            <select
-              value={centre}
-              onChange={(e) => handleCentreChange(e.target.value)}
-              required
-              className="min-h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100"
-            >
-              <option value="">
-                {t("selectProcurementCentre")}
-              </option>
-
-              {centres.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-          </section>
-
-          <section className="rounded-2xl bg-white p-4 shadow-sm">
+      {!crops.initialLoading && (
+        <form onSubmit={handleCheckAvailability} className="space-y-4">
+          {/* Crop ------------------------------------------------------- */}
+          <section className={card}>
             <div className="mb-4 flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-50 text-lg">
                 🌾
               </div>
 
               <div>
-                <h2 className="font-semibold text-slate-900">
-                  {t("crop")}
-                </h2>
-
-                <p className="text-xs text-slate-500">
-                  {t("selectCropDescription")}
-                </p>
+                <h2 className="font-semibold text-slate-900">{t("crop")}</h2>
+                <p className="text-xs text-slate-500">{t("selectCropDescription")}</p>
               </div>
             </div>
 
-            <div
-              className="relative"
-              data-crop-picker
-            >
+            <div className="relative" ref={cropBoxRef}>
               <button
                 type="button"
-                onClick={() => {
-                  if (centre) {
-                    setShowCropList((value) => !value);
-                  } else {
-                    setVoiceMessage(t("selectCentreFirst"));
-                  }
-                }}
-                className={`flex min-h-12 w-full items-center justify-between rounded-xl border px-3 text-left text-sm ${
-                  centre
-                    ? "border-slate-200 bg-slate-50"
-                    : "cursor-not-allowed border-slate-100 bg-slate-100 text-slate-400"
-                }`}
+                onClick={() => setCropListOpen((open) => !open)}
+                className={`flex items-center justify-between text-left ${control}`}
               >
-                <span>
-                  {selectedCrop
-                    ? i18n.language === "hi"
-                      ? selectedCrop.hi
-                      : selectedCrop.en
-                    : t("selectCrop")}
+                <span className={selectedCrop ? "text-slate-900" : "text-slate-400"}>
+                  {selectedCrop ? selectedCrop.canonicalName : t("selectCrop")}
                 </span>
-
-                <span>⌄</span>
+                <span className="text-slate-400">▾</span>
               </button>
 
-              {showCropList && centre && (
-                <div className="absolute left-0 right-0 z-20 mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
-                  <div className="flex items-center gap-2 border-b border-slate-100 p-2">
+              {cropListOpen && (
+                <div className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
+                  <div className="sticky top-0 border-b border-slate-100 bg-white p-2">
                     <input
                       type="text"
-                      value={cropSearch}
-                      onChange={(e) =>
-                        setCropSearch(e.target.value)
-                      }
+                      value={cropQuery}
                       autoFocus
-                      placeholder={t("cropSearchPlaceholder")}
-                      className="min-w-0 flex-1 rounded-lg bg-slate-50 px-3 py-2.5 text-sm outline-none"
+                      onChange={(event) => setCropQuery(event.target.value)}
+                      placeholder={t("searchCrop")}
+                      className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:border-green-600"
                     />
+                  </div>
 
+                  {visibleCrops.length === 0 && (
+                    <p className="px-3 py-4 text-center text-sm text-slate-400">
+                      {t("noCropsMatch")}
+                    </p>
+                  )}
+
+                  {visibleCrops.map((crop) => (
                     <button
+                      key={crop.id}
                       type="button"
-                      onClick={startVoiceSearch}
-                      disabled={voiceListening}
-                      title={t("voiceInput")}
-                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-lg ${
-                        voiceListening
-                          ? "bg-red-100 text-red-600"
-                          : "bg-green-100 text-green-700"
+                      onClick={() => {
+                        setCropId(crop.id);
+                        setCentreId("");
+                        setCropListOpen(false);
+                        setCropQuery("");
+                        invalidateOffer();
+                      }}
+                      className={`flex w-full items-center justify-between px-3 py-3 text-left text-sm hover:bg-green-50 ${
+                        crop.id === cropId ? "bg-green-50 font-semibold" : ""
                       }`}
                     >
-                      {voiceListening ? "●" : "🎤"}
+                      {/* canonicalName is the government's own wording and is
+                          deliberately never translated (farmer.md §7). */}
+                      <span className="text-slate-800">{crop.canonicalName}</span>
+
+                      <span className="ml-2 shrink-0 text-xs text-slate-400">
+                        {crop.season?.code} {crop.marketingYear}
+                      </span>
                     </button>
-                  </div>
-
-                  <div className="max-h-64 overflow-y-auto">
-                    {filteredCrops.length > 0 ? (
-                      filteredCrops.map((item) => (
-                        <button
-                          key={item.id}
-                          type="button"
-                          onClick={() => {
-                            setCropId(item.id);
-                            setCropSearch("");
-                            setShowCropList(false);
-                            setVoiceMessage("");
-                            setVoiceSuggestion(null);
-                          }}
-                          className="flex w-full items-center justify-between border-b border-slate-50 px-4 py-3 text-left hover:bg-green-50"
-                        >
-                          <span className="text-sm font-medium text-slate-800">
-                            {i18n.language === "hi"
-                              ? item.hi
-                              : item.en}
-                          </span>
-
-                          <span className="text-xs text-slate-400">
-                            {i18n.language === "hi"
-                              ? item.en
-                              : item.hi}
-                          </span>
-                        </button>
-                      ))
-                    ) : (
-                      <p className="px-4 py-4 text-center text-sm text-slate-500">
-                        {t("searchNoCrop")}
-                      </p>
-                    )}
-                  </div>
+                  ))}
                 </div>
               )}
             </div>
-
-            {voiceListening && (
-              <div className="mt-3 rounded-xl bg-green-50 px-3 py-3 text-sm text-green-700">
-                <div className="flex items-center gap-2">
-                  <span className="animate-pulse">🎤</span>
-                  <span>{t("voiceListening")}</span>
-                </div>
-              </div>
-            )}
-
-            {voiceMessage && !voiceListening && (
-              <div
-                className={`mt-3 rounded-xl px-3 py-3 text-sm ${
-                  voiceSuggestion
-                    ? "bg-amber-50 text-amber-800"
-                    : cropId
-                    ? "bg-green-50 text-green-700"
-                    : "bg-red-50 text-red-700"
-                }`}
-              >
-                <p>{voiceMessage}</p>
-
-                {voiceSuggestion && (
-                  <button
-                    type="button"
-                    onClick={selectSuggestedCrop}
-                    className="mt-2 rounded-lg bg-green-700 px-3 py-2 text-xs font-semibold text-white"
-                  >
-                    {i18n.language === "hi"
-                      ? voiceSuggestion.hi
-                      : voiceSuggestion.en}
-                  </button>
-                )}
-              </div>
-            )}
           </section>
 
-          <section className="rounded-2xl bg-white p-4 shadow-sm">
+          {/* Centre ----------------------------------------------------- */}
+          <section className={card}>
+            <div className="mb-4 flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-50 text-lg">
+                📍
+              </div>
+
+              <div>
+                <h2 className="font-semibold text-slate-900">{t("procurementCentre")}</h2>
+                <p className="text-xs text-slate-500">{t("selectCentreDescription")}</p>
+              </div>
+            </div>
+
+            <select
+              value={centreId}
+              disabled={!cropId || centres.loading}
+              onChange={(event) => {
+                setCentreId(event.target.value);
+                invalidateOffer();
+              }}
+              className={`${control} disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400`}
+            >
+              <option value="">
+                {!cropId
+                  ? t("selectCropFirst")
+                  : centres.loading
+                    ? t("loading")
+                    : t("selectProcurementCentre")}
+              </option>
+
+              {(centres.data ?? []).map((centre) => (
+                <option key={centre.id} value={centre.id}>
+                  {centre.name} — {centre.district?.name}
+                </option>
+              ))}
+            </select>
+
+            {cropId && !centres.loading && (centres.data ?? []).length === 0 && (
+              <p className="mt-2 text-xs text-amber-700">{t("noCentresForCrop")}</p>
+            )}
+
+            {centres.error && (
+              <p className="mt-2 text-xs text-red-500">{translateError(t, centres.error)}</p>
+            )}
+
+            {selectedCentre && <DataTypeNote dataType={selectedCentre.dataType} />}
+          </section>
+
+          {/* Quantity --------------------------------------------------- */}
+          <section className={card}>
             <div className="mb-4 flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-50 text-lg">
                 ⚖️
               </div>
 
               <div>
-                <h2 className="font-semibold text-slate-900">
-                  {t("quantity")}
-                </h2>
-
-                <p className="text-xs text-slate-500">
-                  {t("quantityDescription")}
-                </p>
+                <h2 className="font-semibold text-slate-900">{t("quantity")}</h2>
+                <p className="text-xs text-slate-500">{t("quantityDescription")}</p>
               </div>
             </div>
 
-            <div className="flex">
+            <div className="flex items-center gap-2">
               <input
                 type="number"
-                min="1"
-                max="50"
-                step="1"
-                value={quantity}
-                onChange={(e) =>
-                  handleQuantityChange(e.target.value)
-                }
+                value={quantityQuintal}
+                min={quantity?.minQuintal}
+                max={quantity?.maxQuintal}
+                step={quantity?.integerOnly ? 1 : "any"}
+                inputMode="numeric"
                 placeholder={t("enterQuantity")}
-                required
-                className="min-w-0 flex-1 rounded-l-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100"
+                onChange={(event) => {
+                  setQuantityQuintal(event.target.value);
+                  setFieldError(null);
+                  invalidateOffer();
+                }}
+                className={control}
               />
 
-              <span className="flex items-center rounded-r-xl border border-l-0 border-slate-200 bg-slate-100 px-3 text-sm text-slate-500">
-                {t("quintal") || "Quintal"}
-              </span>
+              <span className="shrink-0 text-sm font-medium text-slate-500">{t("quintal")}</span>
             </div>
 
-            <p className="mt-2 text-xs text-slate-500">
-              {t("maxQuantity") ||
-                "Maximum 50 quintals per booking."}
+            {/* The range comes from the server and is also a database CHECK;
+                hardcoding it here would let the two disagree (farmer.md §9). */}
+            <p className="mt-2 text-xs text-slate-400">
+              {quantity
+                ? t("quantityRange", { min: quantity.minQuintal, max: quantity.maxQuintal })
+                : t("loading")}
             </p>
-
-            {quantityError && (
-              <p className="mt-2 text-xs font-medium text-red-600">
-                {quantityError}
-              </p>
-            )}
           </section>
 
-          <section className="rounded-2xl bg-white p-4 shadow-sm">
+          {/* Date ------------------------------------------------------- */}
+          <section className={card}>
             <div className="mb-4 flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-50 text-lg">
                 📅
               </div>
 
               <div>
-                <h2 className="font-semibold text-slate-900">
-                  {t("date")}
-                </h2>
-
-                <p className="text-xs text-slate-500">
-                  {t("selectDateDescription")}
-                </p>
+                <h2 className="font-semibold text-slate-900">{t("preferredDate")}</h2>
+                <p className="text-xs text-slate-500">{t("preferredDateHelp")}</p>
               </div>
             </div>
 
             <input
               type="date"
-              min={today}
-              value={date}
-              onChange={(e) => {
-                setDate(e.target.value);
-                setTimeSlot("");
+              value={preferredDate}
+              min={minDate}
+              onChange={(event) => {
+                setPreferredDate(event.target.value);
+                invalidateOffer();
               }}
-              required
-              className="min-h-12 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100"
+              className={control}
             />
           </section>
 
-          {date && (
-            <section className="rounded-2xl bg-white p-4 shadow-sm">
-              <div className="mb-4 flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-50 text-lg">
-                  🕐
-                </div>
+          {fieldError && <p className="text-sm text-red-600">{fieldError}</p>}
 
-                <div>
-                  <h2 className="font-semibold text-slate-900">
-                    {t("timeSlot")}
-                  </h2>
-
-                  <p className="text-xs text-slate-500">
-                    {t("chooseTimeDescription")}
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                {slots.map((slot) => {
-                  const isAvailable = slot.available > 0;
-                  const isSelected = timeSlot === slot.time;
-
-                  return (
-                    <button
-                      key={slot.time}
-                      type="button"
-                      disabled={!isAvailable}
-                      onClick={() => {
-                        if (isAvailable) {
-                          setTimeSlot(slot.time);
-                        }
-                      }}
-                      className={`flex min-h-14 w-full items-center justify-between rounded-xl border px-4 py-3 text-left transition ${
-                        isSelected
-                          ? "border-green-600 bg-green-50"
-                          : isAvailable
-                          ? "border-slate-200 bg-slate-50 hover:border-green-400"
-                          : "cursor-not-allowed border-slate-100 bg-slate-100 opacity-60"
-                      }`}
-                    >
-                      <div>
-                        <p
-                          className={`text-sm font-semibold ${
-                            isSelected
-                              ? "text-green-700"
-                              : "text-slate-700"
-                          }`}
-                        >
-                          {slot.time}
-                        </p>
-
-                        <p className="mt-1 text-xs text-slate-500">
-                          {isAvailable
-                            ? `${slot.available} ${t(
-                                "slotsAvailable"
-                              )}`
-                            : t("slotFull")}
-                        </p>
-                      </div>
-
-                      {isSelected && (
-                        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-green-700 text-sm text-white">
-                          ✓
-                        </span>
-                      )}
-
-                      {!isAvailable && (
-                        <span className="text-xs font-semibold text-slate-400">
-                          {t("full")}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-          )}
+          {error && <ErrorState error={error} />}
 
           <button
             type="submit"
-            disabled={
-              !centre ||
-              !cropId ||
-              !quantity ||
-              !date ||
-              !timeSlot ||
-              !!quantityError
-            }
-            className={`min-h-12 w-full rounded-xl px-4 py-3 text-sm font-semibold text-white transition ${
-              centre &&
-              cropId &&
-              quantity &&
-              date &&
-              timeSlot &&
-              !quantityError
-                ? "bg-green-700 hover:bg-green-800"
-                : "cursor-not-allowed bg-slate-300"
-            }`}
+            disabled={searching}
+            className="min-h-12 w-full rounded-xl bg-green-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-green-800 disabled:cursor-not-allowed disabled:bg-green-300"
           >
-            {t("reviewBooking")} →
+            {searching ? t("checkingAvailability") : t("searchAvailability")}
           </button>
         </form>
-      </main>
-    </div>
+      )}
+
+      {/* Offer -------------------------------------------------------- */}
+      {offer && !offer.available && (
+        <section className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+          <h3 className="font-semibold text-amber-900">{t("noAvailabilityTitle")}</h3>
+
+          <p className="mt-1 text-sm leading-5 text-amber-800">
+            {translateReason(t, offer.reasonCode)}
+          </p>
+        </section>
+      )}
+
+      {offer?.available && offer.window && (
+        <section className="mt-4 overflow-hidden rounded-2xl border border-green-200 bg-white shadow-sm">
+          <div className="bg-green-50 px-4 py-3">
+            <h3 className="font-semibold text-green-900">{t("earliestAvailableWindow")}</h3>
+          </div>
+
+          <div className="divide-y divide-slate-100 px-4">
+            <div className="flex items-center justify-between py-3">
+              <span className="text-sm text-slate-500">{t("date")}</span>
+              <span className="text-sm font-semibold text-slate-900">
+                {formatDate(offer.window.serviceDate, offer.window.centreTimezone, locale)}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between py-3">
+              <span className="text-sm text-slate-500">{t("arriveBy")}</span>
+              <span className="text-sm font-semibold text-slate-900">
+                {formatTimeRange(
+                  offer.window.scheduledStartAt,
+                  offer.window.processingEndAt,
+                  offer.window.centreTimezone,
+                  locale,
+                )}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between py-3">
+              <span className="text-sm text-slate-500">{t("processingTime")}</span>
+              <span className="text-sm font-semibold text-slate-900">
+                {formatMinutes(offer.window.processingMinutes, locale, {
+                  hour: t("hoursShort"),
+                  minute: t("minutesShort"),
+                })}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between py-3">
+              <span className="text-sm text-slate-500">{t("lane")}</span>
+              <span className="text-sm font-semibold text-slate-900">{offer.window.laneNo}</span>
+            </div>
+          </div>
+
+          {/* Storage headroom is never invented; the server returns a reason
+              code instead of a number (bookings.md §5.4). */}
+          {offer.storageCheck?.status === "NOT_AVAILABLE" && (
+            <p className="px-4 pb-2 text-xs text-slate-400">
+              {translateReason(t, offer.storageCheck.reasonCode)}
+            </p>
+          )}
+
+          <div className="p-4 pt-2">
+            <button
+              type="button"
+              onClick={handleConfirm}
+              disabled={booking}
+              className="min-h-12 w-full rounded-xl bg-green-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-green-800 disabled:cursor-not-allowed disabled:bg-green-300"
+            >
+              {booking ? t("confirmingBooking") : t("bookThisWindow")}
+            </button>
+
+            <p className="mt-2 text-center text-xs text-slate-400">{t("windowNotHeldNote")}</p>
+          </div>
+        </section>
+      )}
+    </FarmerLayout>
   );
 }
 

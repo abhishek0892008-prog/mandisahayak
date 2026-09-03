@@ -1,117 +1,66 @@
-export const crops = [
-  {
-    id: "wheat",
-    en: "Wheat",
-    hi: "गेहूं",
-    aliases: ["wheat", "गेहूं", "गेहूँ", "गेहू", "gehun", "gehu", "ghehu", "gahu", "व्हीट"]
-  },
-  {
-    id: "rice",
-    en: "Rice",
-    hi: "चावल",
-    aliases: ["rice", "चावल", "धान", "dhan", "chawal", "chaawal", "राइस"]
-  },
-  {
-    id: "mustard",
-    en: "Mustard",
-    hi: "सरसों",
-    aliases: ["mustard", "सरसों", "सरसो", "sarson", "sarso", "मस्टर्ड"]
-  },
-  {
-    id: "maize",
-    en: "Maize",
-    hi: "मक्का",
-    aliases: ["maize", "corn", "मक्का", "मकई", "makka", "makai", "मेज", "मेज़"]
-  },
-  {
-    id: "pearl-millet",
-    en: "Pearl Millet",
-    hi: "बाजरा",
-    aliases: ["pearl millet", "millet", "बाजरा", "बाजरी", "bajra", "bajri", "पर्ल मिलेट"]
-  },
-  {
-    id: "gram",
-    en: "Gram",
-    hi: "चना",
-    aliases: ["gram", "chickpea", "चना", "chana", "चिकपी"]
-  },
-  {
-    id: "lentil",
-    en: "Lentil",
-    hi: "मसूर",
-    aliases: ["lentil", "मसूर", "मसूर दाल", "masoor", "masur", "लेंटिल"]
-  },
-  {
-    id: "soybean",
-    en: "Soybean",
-    hi: "सोयाबीन",
-    aliases: ["soybean", "soyabean", "soya", "soya bean", "सोयाबीन", "सोया"]
-  },
-  {
-    id: "cotton",
-    en: "Cotton",
-    hi: "कपास",
-    aliases: ["cotton", "कपास", "kapas", "कॉटन"]
-  },
-  {
-    id: "groundnut",
-    en: "Groundnut",
-    hi: "मूंगफली",
-    aliases: ["groundnut", "peanut", "मूंगफली", "moongfali", "mungfali", "ग्राउंडनट", "पीनट"]
-  },
-  {
-    id: "barley",
-    en: "Barley",
-    hi: "जौ",
-    aliases: ["barley", "जौ", "jau", "जऊ"]
-  },
-  {
-    id: "sugarcane",
-    en: "Sugarcane",
-    hi: "गन्ना",
-    aliases: ["sugarcane", "गन्ना", "ganna", "ganna crop"]
-  },
-  {
-    id: "potato",
-    en: "Potato",
-    hi: "आलू",
-    aliases: ["potato", "आलू", "aloo", "alu"]
-  },
-  {
-    id: "onion",
-    en: "Onion",
-    hi: "प्याज",
-    aliases: ["onion", "प्याज", "प्याज़", "pyaz", "pyaaz"]
-  }
-];
-
-export const centreCropIds = {
-  "Procurement Centre 1": [
-    "wheat",
-    "rice",
-    "mustard",
-    "maize",
-    "pearl-millet",
-    "gram",
-    "barley",
-    "potato",
-    "onion"
-  ],
-  "Procurement Centre 2": [
-    "wheat",
-    "rice",
-    "soybean",
-    "cotton",
-    "groundnut",
-    "sugarcane"
-  ],
-  "Procurement Centre 3": [
-    "mustard",
-    "maize",
-    "pearl-millet",
-    "gram",
-    "lentil",
-    "barley",
-    "potato"
-  ]
+/**
+ * Search aliases for the crop picker, keyed by the backend's canonical crop
+ * code.
+ *
+ * This file used to be the crop list itself, with its own ids ("rice",
+ * "mustard") and its own centre→crop map. Both were wrong once the API became
+ * the source of truth: the server's codes are `PADDY` and `RAPESEED_MUSTARD`,
+ * crop ids are UUIDs, and centre eligibility is a server rule.
+ *
+ * What survives is the part the server does not provide and should not: the
+ * Hindi and romanised spellings a farmer actually types or says. The canonical
+ * name still comes from the API and is never translated — it is the
+ * government's own wording (farmer.md §7).
+ */
+export const cropAliases = {
+  WHEAT: ["wheat", "गेहूं", "गेहूँ", "गेहू", "gehun", "gehu", "gahu", "व्हीट"],
+  PADDY: ["paddy", "rice", "धान", "चावल", "dhan", "chawal", "chaawal", "राइस", "पैडी"],
+  RAPESEED_MUSTARD: ["mustard", "rapeseed", "सरसों", "सरसो", "राई", "sarson", "sarso", "मस्टर्ड"],
+  MAIZE: ["maize", "corn", "मक्का", "मकई", "makka", "makai", "मेज", "मेज़"],
+  BAJRA: ["bajra", "pearl millet", "बाजरा", "बाजरी", "bajri", "पर्ल मिलेट"],
+  JOWAR: ["jowar", "sorghum", "ज्वार", "juar", "जोवार"],
+  RAGI: ["ragi", "finger millet", "रागी", "मंडुआ", "mandua", "नाचनी"],
+  GRAM: ["gram", "chickpea", "chana", "चना", "चिकपी", "बंगाल ग्राम"],
+  LENTIL_MASUR: ["lentil", "masur", "masoor", "मसूर", "मसूर दाल", "लेंटिल"],
+  TUR_ARHAR: ["tur", "arhar", "pigeon pea", "अरहर", "तूर", "तुअर", "toor"],
+  MOONG: ["moong", "mung", "green gram", "मूंग", "मूँग", "मुंग"],
+  URAD: ["urad", "black gram", "उड़द", "उरद", "urd"],
+  GROUNDNUT: ["groundnut", "peanut", "मूंगफली", "moongfali", "mungfali", "ग्राउंडनट", "पीनट"],
+  SOYBEAN_YELLOW: ["soybean", "soyabean", "soya", "soya bean", "सोयाबीन", "सोया"],
+  SUNFLOWER_SEED: ["sunflower", "सूरजमुखी", "surajmukhi", "सनफ्लावर"],
+  SESAMUM: ["sesamum", "sesame", "til", "तिल", "सेसम"],
+  NIGERSEED: ["nigerseed", "niger", "रामतिल", "ramtil", "नाइजर"],
+  SAFFLOWER: ["safflower", "कुसुम", "kusum", "कर्डी", "kardi"],
+  BARLEY: ["barley", "जौ", "jau", "जऊ"],
+  COTTON: ["cotton", "कपास", "kapas", "कॉटन", "रुई"],
 };
+
+/** Normalises for accent- and case-insensitive matching in both scripts. */
+export function normalizeText(value) {
+  return String(value ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^\p{L}\p{N}\s]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Filters API crops by a free-text query, matching the canonical name and any
+ * known alias. An empty query returns everything.
+ */
+export function filterCrops(crops, query) {
+  const needle = normalizeText(query);
+  if (!needle) return crops;
+
+  return crops.filter((crop) => {
+    const candidates = [
+      crop.canonicalName,
+      crop.code,
+      ...(cropAliases[crop.code] ?? []),
+    ].map(normalizeText);
+
+    return candidates.some((candidate) => candidate.includes(needle));
+  });
+}

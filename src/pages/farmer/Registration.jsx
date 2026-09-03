@@ -1,223 +1,207 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 
+import api from "../../lib/api";
+import { translateError, translateFieldErrors, translateReason } from "../../lib/codes";
+import useApiResource from "../../hooks/useApiResource";
+import LanguageToggle from "../../components/LanguageToggle";
+import { ErrorState } from "../../components/StateViews";
+
+/**
+ * The policy version recorded with the consent. It is sent as a value rather
+ * than assumed server-side so the exact text a farmer agreed to is auditable.
+ */
+const CONSENT_POLICY_VERSION = "v1";
+
+/**
+ * Farmer registration.
+ *
+ * Two things changed from the prototype and both were required, not optional:
+ *
+ *  - **The bank account and IFSC fields are gone.** No column exists for them
+ *    (decisions D-6/D-7), the endpoint ignores them, and the project's public
+ *    claim is that no bank details are collected anywhere. A form that asked
+ *    for them made that claim false.
+ *  - **Districts come from the API and are sent as ids.** The hardcoded name
+ *    list could not have satisfied an endpoint that requires a UUID.
+ */
 function Registration() {
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
 
-  const [district, setDistrict] = useState("");
-  const [village, setVillage] = useState("");
-  const [errors, setErrors] = useState({});
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [districtId, setDistrictId] = useState("");
+  const [villageId, setVillageId] = useState("");
+  const [consent, setConsent] = useState(false);
 
-  const districts = [
-    "Aligarh",
-    "Agra",
-    "Hathras",
-    "Mathura",
-    "Bulandshahr",
-  ];
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [submitError, setSubmitError] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const villages = {
-    Aligarh: ["Jamalpur", "Dodhpur", "Quarsi", "Sasni Gate"],
-    Agra: ["Kheragarh", "Fatehabad", "Etmadpur"],
-    Hathras: ["Sadabad", "Sikandra Rao", "Mursan"],
-    Mathura: ["Govardhan", "Chhata", "Kosi Kalan"],
-    Bulandshahr: ["Sikandrabad", "Khurja", "Anupshahr"],
-  };
+  const districts = useApiResource((signal) => api.districts(signal), []);
 
-  const handlePhoneChange = (e) => {
-    const value = e.target.value.replace(/\D/g, "").slice(0, 10);
-    e.target.value = value;
+  // Villages are fetched only once a district is chosen, and the response says
+  // whether any exist. An empty list is the correct answer today, not a bug
+  // (farmer.md §6) — so the field is hidden rather than shown empty.
+  const villages = useApiResource(
+    (signal) => api.villages(districtId, signal),
+    [districtId],
+    { enabled: Boolean(districtId) },
+  );
 
-    if (errors.phone) {
-      setErrors((prev) => ({ ...prev, phone: "" }));
-    }
-  };
+  const villageOptions = villages.data?.available ? (villages.data.villages ?? []) : [];
 
-  const handleAccountNumberChange = (e) => {
-    const value = e.target.value.replace(/\D/g, "").slice(0, 18);
-    e.target.value = value;
+  function clearFieldError(field) {
+    setFieldErrors((previous) => {
+      if (!previous[field]) return previous;
+      const next = { ...previous };
+      delete next[field];
+      return next;
+    });
+  }
 
-    if (errors.accountNumber) {
-      setErrors((prev) => ({ ...prev, accountNumber: "" }));
-    }
-  };
+  /**
+   * Client-side checks exist to save a round trip, never to decide anything.
+   * The server re-applies every rule and its answer is the one that counts.
+   */
+  function validate() {
+    const errors = {};
 
-  const handleIfscChange = (e) => {
-    const value = e.target.value
-      .replace(/[^a-zA-Z0-9]/g, "")
-      .toUpperCase()
-      .slice(0, 11);
-
-    e.target.value = value;
-
-    if (errors.ifscCode) {
-      setErrors((prev) => ({ ...prev, ifscCode: "" }));
-    }
-  };
-
-  const validateForm = (formData) => {
-    const newErrors = {};
-
-    const fullName = String(
-      formData.get("fullName") || ""
-    ).trim();
-
-    const phone = String(
-      formData.get("phone") || ""
-    ).trim();
-
-    const accountNumber = String(
-      formData.get("accountNumber") || ""
-    ).trim();
-
-    const ifscCode = String(
-      formData.get("ifscCode") || ""
-    ).trim().toUpperCase();
-
-    if (fullName.length < 2) {
-      newErrors.fullName = "Please enter a valid full name.";
+    if (fullName.trim().length < 2) {
+      errors.fullName = t("codes.fieldErrors.NAME_TOO_SHORT");
     }
 
     if (!/^[6-9]\d{9}$/.test(phone)) {
-      newErrors.phone =
-        "Enter a valid 10-digit mobile number.";
+      errors.phone = t("codes.fieldErrors.PHONE_INVALID_INDIAN_MOBILE");
     }
 
-    if (!/^\d{9,18}$/.test(accountNumber)) {
-      newErrors.accountNumber =
-        "Account number must contain 9–18 digits.";
+    if (!districtId) {
+      errors.districtId = t("codes.fieldErrors.DISTRICT_ID_INVALID");
     }
 
-    if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(ifscCode)) {
-      newErrors.ifscCode =
-        "Enter a valid 11-character IFSC code.";
+    if (!consent) {
+      errors.consent = t("codes.fieldErrors.CONSENT_REQUIRED");
     }
 
-    if (!district) {
-      newErrors.district = "Please select your district.";
-    }
+    return errors;
+  }
 
-    if (!village) {
-      newErrors.village = "Please select your village.";
-    }
+  async function handleSubmit(event) {
+    event.preventDefault();
 
-    return newErrors;
-  };
+    const errors = validate();
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-
-    const formData = new FormData(e.target);
-    const newErrors = validateForm(formData);
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
       return;
     }
 
-    const phone = String(
-      formData.get("phone") || ""
-    ).trim();
+    setSubmitting(true);
+    setSubmitError(null);
+    setFieldErrors({});
 
-    const farmerData = {
-      farmerId: `farmer-${phone}`,
-      fullName: String(
-        formData.get("fullName") || ""
-      ).trim(),
-      phone,
-      district,
-      village,
-      accountNumber: String(
-        formData.get("accountNumber") || ""
-      ).trim(),
-      ifscCode: String(
-        formData.get("ifscCode") || ""
-      ).trim().toUpperCase(),
-    };
+    try {
+      const challenge = await api.registerStartOtp({
+        fullName: fullName.trim(),
+        phone,
+        districtId,
+        villageId: villageId || undefined,
+        locale: i18n.language === "hi" ? "hi" : "en",
+        consent: { policyVersion: CONSENT_POLICY_VERSION, accepted: true },
+      });
 
-    localStorage.setItem(
-      "farmerData",
-      JSON.stringify(farmerData)
-    );
+      // The challenge travels in router state, never in storage: it is
+      // short-lived, and the OTP screen is the only consumer.
+      navigate("/verify-otp", {
+        replace: true,
+        state: { challenge, phone, purpose: "register" },
+      });
+    } catch (error) {
+      const fields = translateFieldErrors(t, error);
 
-    localStorage.setItem(
-      "pendingPhone",
-      phone
-    );
+      if (Object.keys(fields).length > 0) {
+        setFieldErrors(fields);
+      } else {
+        setSubmitError(error);
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
-    navigate("/verify-otp");
-  };
+  const inputClasses = (hasError) =>
+    `w-full border rounded-lg p-3 bg-gray-50 outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100 ${
+      hasError ? "border-red-400" : "border-gray-200"
+    }`;
 
   return (
     <div className="min-h-screen bg-green-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-6">
+        <div className="flex justify-end">
+          <LanguageToggle variant="onLight" />
+        </div>
+
         <div className="flex justify-center mb-3">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-green-700 text-2xl shadow-sm">
             🌾
           </div>
         </div>
 
-        <h1 className="text-2xl font-bold text-green-800 text-center">
-          FarmQueue
-        </h1>
+        <h1 className="text-2xl font-bold text-green-800 text-center">{t("appName")}</h1>
 
-        <p className="text-center text-gray-500 mt-1">
-          Farmer Procurement Portal
-        </p>
+        <p className="text-center text-gray-500 mt-1">{t("farmerProcurementPortal")}</p>
 
         <div className="mt-8">
           <div className="flex justify-between items-center mb-2">
             <span className="text-xs font-semibold text-green-700 uppercase tracking-wide">
-              Step 1 of 2
+              {t("stepOf", { current: 1, total: 2 })}
             </span>
 
-            <span className="text-xs text-gray-400">
-              Registration
-            </span>
+            <span className="text-xs text-gray-400">{t("registrationStepLabel")}</span>
           </div>
 
           <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-            <div className="w-1/2 h-full bg-green-700 rounded-full"></div>
+            <div className="w-1/2 h-full bg-green-700 rounded-full" />
           </div>
 
-          <h2 className="text-xl font-semibold mt-6 text-gray-900">
-            Create your account
-          </h2>
+          <h2 className="text-xl font-semibold mt-6 text-gray-900">{t("createAccount")}</h2>
 
-          <p className="text-gray-500 text-sm mt-1 mb-6">
-            Enter your details to register as a farmer.
-          </p>
+          <p className="text-gray-500 text-sm mt-1 mb-6">{t("createAccountDescription")}</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {submitError && (
+          <ErrorState error={submitError} className="mb-4" onRetry={() => setSubmitError(null)} />
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Full name
+            <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-1">
+              {t("fullName")}
             </label>
 
             <input
+              id="fullName"
               type="text"
-              name="fullName"
-              placeholder="Enter your full name"
-              required
+              value={fullName}
+              onChange={(event) => {
+                setFullName(event.target.value);
+                clearFieldError("fullName");
+              }}
+              placeholder={t("fullNamePlaceholder")}
               autoComplete="name"
-              className={`w-full border rounded-lg p-3 bg-gray-50 outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100 ${
-                errors.fullName
-                  ? "border-red-400"
-                  : "border-gray-200"
-              }`}
+              className={inputClasses(fieldErrors.fullName)}
             />
 
-            {errors.fullName && (
-              <p className="text-xs text-red-500 mt-1">
-                {errors.fullName}
-              </p>
+            {fieldErrors.fullName && (
+              <p className="text-xs text-red-500 mt-1">{fieldErrors.fullName}</p>
             )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Mobile number
+            <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
+              {t("mobileNumber")}
             </label>
 
             <div className="flex">
@@ -226,223 +210,140 @@ function Registration() {
               </span>
 
               <input
+                id="phone"
                 type="tel"
-                name="phone"
-                maxLength="10"
-                required
+                value={phone}
+                maxLength={10}
                 inputMode="numeric"
                 autoComplete="tel"
-                placeholder="Enter 10-digit mobile number"
-                onChange={handlePhoneChange}
+                placeholder={t("mobileNumberPlaceholder")}
+                onChange={(event) => {
+                  setPhone(event.target.value.replace(/\D/g, "").slice(0, 10));
+                  clearFieldError("phone");
+                }}
                 className={`flex-1 border rounded-r-lg p-3 bg-gray-50 outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100 ${
-                  errors.phone
-                    ? "border-red-400"
-                    : "border-gray-200"
+                  fieldErrors.phone ? "border-red-400" : "border-gray-200"
                 }`}
               />
             </div>
 
-            {errors.phone ? (
-              <p className="text-xs text-red-500 mt-1.5">
-                {errors.phone}
-              </p>
+            {fieldErrors.phone ? (
+              <p className="text-xs text-red-500 mt-1.5">{fieldErrors.phone}</p>
             ) : (
-              <p className="text-xs text-gray-400 mt-1.5">
-                We'll send an OTP to verify this number.
-              </p>
+              <p className="text-xs text-gray-400 mt-1.5">{t("otpWillBeSent")}</p>
             )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Bank account number
-            </label>
-
-            <input
-              type="text"
-              name="accountNumber"
-              required
-              inputMode="numeric"
-              autoComplete="off"
-              minLength="9"
-              maxLength="18"
-              placeholder="Enter bank account number"
-              onChange={handleAccountNumberChange}
-              className={`w-full border rounded-lg p-3 bg-gray-50 outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100 ${
-                errors.accountNumber
-                  ? "border-red-400"
-                  : "border-gray-200"
-              }`}
-            />
-
-            {errors.accountNumber ? (
-              <p className="text-xs text-red-500 mt-1">
-                {errors.accountNumber}
-              </p>
-            ) : (
-              <p className="text-xs text-gray-400 mt-1">
-                Enter your bank account number using digits only.
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              District
+            <label htmlFor="districtId" className="block text-sm font-medium text-gray-700 mb-1">
+              {t("district")}
             </label>
 
             <select
-              name="district"
-              value={district}
-              onChange={(e) => {
-                setDistrict(e.target.value);
-                setVillage("");
-                setErrors((prev) => ({
-                  ...prev,
-                  district: "",
-                  village: "",
-                }));
+              id="districtId"
+              value={districtId}
+              disabled={districts.loading || Boolean(districts.error)}
+              onChange={(event) => {
+                setDistrictId(event.target.value);
+                setVillageId("");
+                clearFieldError("districtId");
               }}
-              required
-              className={`w-full border rounded-lg p-3 bg-gray-50 text-gray-700 outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100 ${
-                errors.district
-                  ? "border-red-400"
-                  : "border-gray-200"
-              }`}
+              className={inputClasses(fieldErrors.districtId)}
             >
               <option value="">
-                Select district
+                {districts.loading ? t("loading") : t("selectDistrict")}
               </option>
 
-              {districts.map((item) => (
-                <option key={item} value={item}>
-                  {item}
+              {(districts.data ?? []).map((district) => (
+                <option key={district.id} value={district.id}>
+                  {district.name}
                 </option>
               ))}
             </select>
 
-            {errors.district && (
-              <p className="text-xs text-red-500 mt-1">
-                {errors.district}
-              </p>
+            {districts.error && (
+              <p className="text-xs text-red-500 mt-1">{translateError(t, districts.error)}</p>
+            )}
+
+            {fieldErrors.districtId && (
+              <p className="text-xs text-red-500 mt-1">{fieldErrors.districtId}</p>
             )}
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Village
-            </label>
+          {/*
+            The village field appears only when the server actually has village
+            data. Rendering an empty dropdown, or falling back to the
+            prototype's unverified list, would both be wrong (farmer.md §6).
+          */}
+          {districtId && villageOptions.length > 0 && (
+            <div>
+              <label htmlFor="villageId" className="block text-sm font-medium text-gray-700 mb-1">
+                {t("village")}
+              </label>
 
-            <select
-              name="village"
-              value={village}
-              onChange={(e) => {
-                setVillage(e.target.value);
-                setErrors((prev) => ({
-                  ...prev,
-                  village: "",
-                }));
-              }}
-              disabled={!district}
-              required
-              className={`w-full border rounded-lg p-3 outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100 ${
-                errors.village
-                  ? "border-red-400"
-                  : district
-                  ? "bg-gray-50 text-gray-700 border-gray-200"
-                  : "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200"
-              }`}
-            >
-              <option value="">
-                {district
-                  ? "Select village"
-                  : "Select district first"}
-              </option>
+              <select
+                id="villageId"
+                value={villageId}
+                onChange={(event) => setVillageId(event.target.value)}
+                className={inputClasses(fieldErrors.villageId)}
+              >
+                <option value="">{t("optional")}</option>
 
-              {district &&
-                villages[district]?.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
+                {villageOptions.map((village) => (
+                  <option key={village.id} value={village.id}>
+                    {village.name}
                   </option>
                 ))}
-            </select>
+              </select>
+            </div>
+          )}
 
-            {errors.village && (
-              <p className="text-xs text-red-500 mt-1">
-                {errors.village}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Bank IFSC code
-            </label>
-
-            <input
-              type="text"
-              name="ifscCode"
-              required
-              minLength="11"
-              maxLength="11"
-              autoComplete="off"
-              placeholder="e.g. SBIN0001234"
-              onChange={handleIfscChange}
-              className={`w-full border rounded-lg p-3 bg-gray-50 uppercase outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100 ${
-                errors.ifscCode
-                  ? "border-red-400"
-                  : "border-gray-200"
-              }`}
-            />
-
-            {errors.ifscCode ? (
-              <p className="text-xs text-red-500 mt-1">
-                {errors.ifscCode}
-              </p>
-            ) : (
-              <p className="text-xs text-gray-400 mt-1">
-                Enter your bank's 11-character IFSC code.
-              </p>
-            )}
-          </div>
+          {districtId && !villages.loading && villages.data && !villages.data.available && (
+            <p className="text-xs text-gray-400">
+              {translateReason(t, villages.data.reasonCode)}
+            </p>
+          )}
 
           <div className="flex items-start gap-2 pt-1">
             <input
+              id="consent"
               type="checkbox"
-              name="consent"
-              required
+              checked={consent}
+              onChange={(event) => {
+                setConsent(event.target.checked);
+                clearFieldError("consent");
+              }}
               className="mt-1 accent-green-700"
             />
 
-            <p className="text-xs leading-4 text-gray-500">
-              I confirm that the information provided is correct
-              and agree to use the procurement service.
-            </p>
+            <label htmlFor="consent" className="text-xs leading-4 text-gray-500">
+              {t("consentText")}
+            </label>
           </div>
+
+          {fieldErrors.consent && <p className="text-xs text-red-500">{fieldErrors.consent}</p>}
 
           <button
             type="submit"
-            className="w-full bg-green-700 hover:bg-green-800 text-white font-semibold py-3 rounded-lg transition"
+            disabled={submitting}
+            className="w-full bg-green-700 hover:bg-green-800 disabled:cursor-not-allowed disabled:bg-green-300 text-white font-semibold py-3 rounded-lg transition"
           >
-            Continue to OTP →
+            {submitting ? t("sendingOtp") : `${t("continueToOtp")} →`}
           </button>
         </form>
 
         <p className="text-center text-sm text-gray-500 mt-5">
-          Already registered?{" "}
-
+          {t("alreadyRegistered")}{" "}
           <button
             type="button"
             onClick={() => navigate("/login")}
             className="text-green-700 font-semibold hover:underline"
           >
-            Login
+            {t("loginLink")}
           </button>
         </p>
 
-        <p className="text-center text-xs text-gray-400 mt-5">
-          Secure farmer procurement management
-        </p>
+        <p className="text-center text-xs text-gray-400 mt-5">{t("secureProcurement")}</p>
       </div>
     </div>
   );

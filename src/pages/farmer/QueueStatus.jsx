@@ -1,184 +1,94 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
+import api from "../../lib/api";
+import useApiResource from "../../hooks/useApiResource";
+import {
+  ACTIVE_BOOKING_STATUSES,
+  translateDisplayStatus,
+  translateEtaConfidence,
+  translateEtaReason,
+  translateQueueState,
+} from "../../lib/codes";
+import { formatMinutes, formatTime } from "../../lib/format";
+import FarmerLayout from "../../components/FarmerLayout";
+import { EmptyState, ErrorState, Loading, StatusBadge } from "../../components/StateViews";
+
+/** Fallback cadence, used only until the server states its own. */
+const DEFAULT_POLL_SECONDS = 10;
+
+/**
+ * Live queue position and ETA.
+ *
+ * Every number the prototype showed here was a literal — token FQ-0284,
+ * position 18, 17 ahead, 35 minutes. All of it now comes from
+ * `GET /bookings/:code/queue`, refreshed at the cadence the server dictates
+ * through `pollAfterSeconds` rather than a hardcoded interval (queue.md §5).
+ *
+ * Position and ETA are presented as different kinds of claim, because they
+ * are: position is exact, an ETA is a projection and always carries the
+ * confidence it was computed at (queue.md §2).
+ */
 function QueueStatus() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const [booking, setBooking] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState(null);
+  const [selected, setSelected] = useState(location.state?.bookingCode ?? null);
 
-  const loadBooking = async () => {
-    setRefreshing(true);
+  const bookings = useApiResource((signal) => api.myBookings(false, signal), []);
 
-    await new Promise((resolve) => setTimeout(resolve, 500));
+  const active = (bookings.data ?? []).filter((booking) =>
+    ACTIVE_BOOKING_STATUSES.has(booking.status),
+  );
 
-    const savedFarmer = localStorage.getItem("farmerData");
+  // Default to the booking starting soonest; let the farmer switch when they
+  // have more than one open.
+  const bookingCode =
+    selected ??
+    [...active].sort((a, b) => new Date(a.scheduledStartAt) - new Date(b.scheduledStartAt))[0]
+      ?.bookingCode ??
+    null;
 
-    if (!savedFarmer) {
-      setBooking(null);
-      setRefreshing(false);
-      navigate("/login");
-      return;
-    }
+  const [pollSeconds, setPollSeconds] = useState(DEFAULT_POLL_SECONDS);
 
-    let currentFarmer = null;
+  const queue = useApiResource(
+    async (signal) => {
+      const result = await api.queue(bookingCode, signal);
 
-    try {
-      currentFarmer = JSON.parse(savedFarmer);
-    } catch {
-      setBooking(null);
-      setRefreshing(false);
-      navigate("/login");
-      return;
-    }
-
-    const farmerId = currentFarmer?.farmerId || "";
-    const farmerPhone = currentFarmer?.phone || "";
-    const savedBookings = localStorage.getItem("bookings");
-
-    if (!savedBookings || (!farmerId && !farmerPhone)) {
-      setBooking(null);
-      setRefreshing(false);
-      return;
-    }
-
-    try {
-      const bookings = JSON.parse(savedBookings);
-
-      if (!Array.isArray(bookings)) {
-        setBooking(null);
-        setRefreshing(false);
-        return;
+      // Cadence is an operational decision the server owns, so adopt whatever
+      // it just told us rather than keeping a constant in the UI.
+      if (typeof result?.pollAfterSeconds === "number" && result.pollAfterSeconds > 0) {
+        setPollSeconds(Math.max(3, result.pollAfterSeconds));
       }
 
-      const farmerBookings = bookings.filter((item) => {
-        const belongsToFarmer =
-          (farmerId && item.farmerId === farmerId) ||
-          (!item.farmerId &&
-            farmerPhone &&
-            item.farmerPhone === farmerPhone);
+      return result;
+    },
+    [bookingCode],
+    { enabled: Boolean(bookingCode), intervalMs: pollSeconds * 1000 },
+  );
 
-        return (
-          belongsToFarmer &&
-          item.status !== "Cancelled" &&
-          item.status !== "Completed"
-        );
-      });
+  const data = queue.data;
+  const locale = i18n.language;
+  const minuteLabels = { hour: t("hoursShort"), minute: t("minutesShort") };
 
-      if (farmerBookings.length === 0) {
-        setBooking(null);
-        setRefreshing(false);
-        return;
-      }
+  return (
+    <FarmerLayout
+      title={t("queueStatus")}
+      subtitle={t("viewYourPosition")}
+      onBack={() => navigate("/dashboard")}
+    >
+      {bookings.error && <ErrorState error={bookings.error} onRetry={bookings.reload} />}
 
-      const sortedBookings = [...farmerBookings].sort((a, b) => {
-        const dateA = new Date(
-          `${a.date || ""}T00:00:00`
-        ).getTime();
+      {bookings.initialLoading && <Loading />}
 
-        const dateB = new Date(
-          `${b.date || ""}T00:00:00`
-        ).getTime();
-
-        if (dateA !== dateB) {
-          return dateA - dateB;
-        }
-
-        return (
-          new Date(b.createdAt || 0).getTime() -
-          new Date(a.createdAt || 0).getTime()
-        );
-      });
-
-      setBooking(sortedBookings[0]);
-      setLastUpdated(new Date());
-    } catch {
-      setBooking(null);
-    }
-
-    setRefreshing(false);
-  };
-
-  useEffect(() => {
-    loadBooking();
-
-    window.addEventListener("bookingUpdated", loadBooking);
-    window.addEventListener("focus", loadBooking);
-
-    return () => {
-      window.removeEventListener("bookingUpdated", loadBooking);
-      window.removeEventListener("focus", loadBooking);
-    };
-  }, []);
-
-  const changeLanguage = (language) => {
-    i18n.changeLanguage(language);
-  };
-
-  if (!booking) {
-    return (
-      <div className="min-h-screen bg-slate-50">
-        <header className="bg-green-700 text-white">
-          <div className="mx-auto w-full max-w-lg px-4 py-4">
-            <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => navigate("/dashboard")}
-                className="flex h-10 w-10 items-center justify-center rounded-full text-2xl hover:bg-white/10"
-              >
-                ←
-              </button>
-
-              <div className="flex items-center rounded-full bg-white/15 p-1">
-                <button
-                  type="button"
-                  onClick={() => changeLanguage("en")}
-                  className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                    i18n.language === "en"
-                      ? "bg-white text-green-700"
-                      : "text-white"
-                  }`}
-                >
-                  {t("english")}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => changeLanguage("hi")}
-                  className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                    i18n.language === "hi"
-                      ? "bg-white text-green-700"
-                      : "text-white"
-                  }`}
-                >
-                  {t("hindi")}
-                </button>
-              </div>
-            </div>
-
-            <h1 className="mt-5 text-2xl font-bold">
-              {t("queueStatus")}
-            </h1>
-          </div>
-        </header>
-
-        <main className="mx-auto w-full max-w-lg px-4 py-6">
-          <div className="rounded-2xl bg-white p-6 text-center shadow-sm">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-green-50 text-3xl">
-              📅
-            </div>
-
-            <h2 className="mt-4 text-lg font-bold text-slate-900">
-              {t("noActiveBooking")}
-            </h2>
-
-            <p className="mt-2 text-sm leading-5 text-slate-500">
-              {t("bookBeforeQueue")}
-            </p>
-
+      {!bookings.initialLoading && !bookingCode && !bookings.error && (
+        <EmptyState
+          icon="🕐"
+          title={t("noActiveBooking")}
+          description={t("noActiveBookingDescription")}
+          action={
             <button
               type="button"
               onClick={() => navigate("/book-slot")}
@@ -186,290 +96,173 @@ function QueueStatus() {
             >
               {t("bookSlot")} →
             </button>
-          </div>
-        </main>
-      </div>
-    );
-  }
+          }
+        />
+      )}
 
-  const position = booking.queuePosition ?? null;
-  const farmersAhead = booking.farmersAhead ?? null;
-  const estimatedWait =
-    booking.estimatedWaitingTime ??
-    booking.estimatedWaitMinutes ??
-    null;
+      {active.length > 1 && (
+        <div className="mb-4">
+          <label htmlFor="bookingSelect" className="block text-sm font-medium text-slate-700">
+            {t("selectBooking")}
+          </label>
 
-  return (
-    <div className="min-h-screen bg-slate-50 pb-24">
-      <header className="bg-green-700 text-white">
-        <div className="mx-auto w-full max-w-lg px-4 py-4">
-          <div className="flex items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={() => navigate("/dashboard")}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-2xl hover:bg-white/10"
-            >
-              ←
-            </button>
+          <select
+            id="bookingSelect"
+            value={bookingCode ?? ""}
+            onChange={(event) => setSelected(event.target.value)}
+            className="mt-1 min-h-12 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-green-600"
+          >
+            {active.map((booking) => (
+              <option key={booking.bookingCode} value={booking.bookingCode}>
+                {booking.bookingCode} — {booking.centre?.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
-            <div className="flex items-center rounded-full bg-white/15 p-1">
-              <button
-                type="button"
-                onClick={() => changeLanguage("en")}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                  i18n.language === "en"
-                    ? "bg-white text-green-700"
-                    : "text-white"
-                }`}
-              >
-                {t("english")}
-              </button>
+      {queue.error && <ErrorState error={queue.error} onRetry={queue.reload} />}
 
-              <button
-                type="button"
-                onClick={() => changeLanguage("hi")}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                  i18n.language === "hi"
-                    ? "bg-white text-green-700"
-                    : "text-white"
-                }`}
-              >
-                {t("hindi")}
-              </button>
+      {bookingCode && queue.initialLoading && <Loading />}
+
+      {data && (
+        <>
+          <section className="overflow-hidden rounded-3xl bg-gradient-to-br from-green-700 to-green-600 p-5 text-white shadow-lg">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-green-100">
+                  {t("tokenNumberLabel")}
+                </p>
+
+                <p className="mt-1 text-3xl font-bold">{data.tokenNumber}</p>
+
+                <p className="mt-1 text-xs text-green-100">{data.bookingCode}</p>
+              </div>
+
+              <span className="shrink-0 rounded-full bg-white/15 px-3 py-1.5 text-xs font-semibold">
+                {translateDisplayStatus(t, data.displayStatus)}
+              </span>
             </div>
-          </div>
 
-          <div className="mt-5">
-            <p className="text-sm text-green-100">
-              {t("queueTracking")}
+            {data.inQueue ? (
+              <div className="mt-5 grid grid-cols-3 gap-2">
+                <div className="rounded-2xl bg-white/10 p-3 text-center">
+                  <p className="text-xs text-green-100">{t("yourPosition")}</p>
+                  <p className="mt-1 text-2xl font-bold">#{data.queuePosition}</p>
+                </div>
+
+                {/* Both "ahead" numbers are shown because one alone misleads:
+                    the lane figure predicts the wait, the centre figure is what
+                    a farmer means by "how many are in front of me"
+                    (queue.md §4.1). */}
+                <div className="rounded-2xl bg-white/10 p-3 text-center">
+                  <p className="text-xs text-green-100">{t("aheadOnLane")}</p>
+                  <p className="mt-1 text-2xl font-bold">{data.aheadOnLane}</p>
+                </div>
+
+                <div className="rounded-2xl bg-white/10 p-3 text-center">
+                  <p className="text-xs text-green-100">{t("aheadAtCentre")}</p>
+                  <p className="mt-1 text-2xl font-bold">{data.aheadAtCentre}</p>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-5 rounded-2xl bg-white/10 p-4">
+                <p className="text-sm font-semibold">{t("notInQueue")}</p>
+                <p className="mt-1 text-xs text-green-100">{t("notInQueueDescription")}</p>
+              </div>
+            )}
+          </section>
+
+          {/* An ETA is an estimate with a stated basis, never a promise. When
+              the server says UNAVAILABLE it explains why instead of showing a
+              number. */}
+          <section className="mt-4 rounded-2xl bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="font-semibold text-slate-900">{t("estimatedWait")}</h2>
+
+              <StatusBadge
+                status={data.etaConfidence === "UNAVAILABLE" ? "UNKNOWN" : "CONFIRMED"}
+                label={translateEtaConfidence(t, data.etaConfidence)}
+              />
+            </div>
+
+            {data.etaConfidence === "UNAVAILABLE" ? (
+              <p className="mt-3 text-sm leading-5 text-slate-500">
+                {translateEtaReason(t, data.etaUnavailableReason)}
+              </p>
+            ) : (
+              <>
+                <p className="mt-3 text-3xl font-bold text-slate-900">
+                  {typeof data.estimatedWaitMinutes === "number"
+                    ? formatMinutes(data.estimatedWaitMinutes, locale, minuteLabels)
+                    : "—"}
+                </p>
+
+                <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-xs text-slate-500">{t("estimatedStart")}</p>
+                    <p className="font-medium text-slate-800">
+                      {formatTime(data.estimatedStartAt, data.centreTimezone, locale) ?? "—"}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs text-slate-500">{t("lane")}</p>
+                    <p className="font-medium text-slate-800">
+                      {data.laneNo} / {data.laneCount}
+                    </p>
+                  </div>
+                </div>
+              </>
+            )}
+          </section>
+
+          <section className="mt-4 rounded-2xl bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm text-slate-500">{t("nowServing")}</span>
+
+              <span className="text-sm font-semibold text-slate-900">
+                {data.currentlyServingToken ?? t("laneIdle")}
+              </span>
+            </div>
+
+            <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
+              <span className="text-sm text-slate-500">{t("queueStatus")}</span>
+
+              <span className="text-sm font-semibold text-slate-900">
+                {translateQueueState(t, data.queueState)}
+              </span>
+            </div>
+          </section>
+
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <p className="text-xs text-slate-400">
+              {t("queueUpdatedAt", {
+                time: formatTime(data.observedAt, data.centreTimezone, locale) ?? "—",
+              })}
             </p>
 
-            <h1 className="mt-1 text-2xl font-bold">
-              {t("queueStatus")}
-            </h1>
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto w-full max-w-lg px-4 py-5">
-        <section className="rounded-2xl bg-white p-4 shadow-sm">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wide text-green-700">
-                {t("yourBooking")}
-              </p>
-
-              <h2 className="mt-1 text-lg font-bold text-slate-900">
-                {booking.crop}
-              </h2>
-
-              <p className="mt-1 text-sm text-slate-500">
-                {booking.centre}
-              </p>
-            </div>
-
-            <span className="shrink-0 rounded-full bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700">
-              {booking.status || t("confirmed")}
-            </span>
+            <button
+              type="button"
+              onClick={queue.reload}
+              className="text-sm font-semibold text-green-700 hover:underline"
+            >
+              {t("refresh")}
+            </button>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <div className="rounded-xl bg-slate-50 p-3">
-              <p className="text-xs text-slate-400">
-                {t("date")}
-              </p>
+          {data.etaBasis && (
+            <details className="mt-3 rounded-2xl bg-white p-4 text-sm shadow-sm">
+              <summary className="cursor-pointer font-medium text-slate-700">
+                {t("etaBasisLabel")}
+              </summary>
 
-              <p className="mt-1 text-sm font-semibold text-slate-800">
-                {booking.date}
-              </p>
-            </div>
-
-            <div className="rounded-xl bg-slate-50 p-3">
-              <p className="text-xs text-slate-400">
-                {t("timeSlot")}
-              </p>
-
-              <p className="mt-1 text-sm font-semibold text-slate-800">
-                {booking.timeSlot}
-              </p>
-            </div>
-          </div>
-        </section>
-
-        <section className="mt-4 rounded-2xl bg-white p-5 text-center shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-            {t("yourToken")}
-          </p>
-
-          <div className="mt-2 text-3xl font-bold tracking-wide text-green-700">
-            {booking.tokenNumber || booking.bookingId || "—"}
-          </div>
-
-          <div className="mx-auto mt-5 h-px w-full bg-slate-100"></div>
-
-          <p className="mt-5 text-sm text-slate-500">
-            {t("yourPosition")}
-          </p>
-
-          <div className="mt-1 text-6xl font-bold text-slate-900">
-            {position ?? "—"}
-          </div>
-
-          <p className="mt-1 text-sm text-slate-500">
-            {farmersAhead !== null
-              ? t("farmersAhead", {
-                  count: farmersAhead,
-                })
-              : "Queue information will appear once updated."}
-          </p>
-        </section>
-
-        <section className="mt-4 rounded-2xl border border-green-100 bg-green-50 p-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-xl shadow-sm">
-              ⏱️
-            </div>
-
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-green-700">
-                {t("estimatedWaitingTime")}
-              </p>
-
-              <p className="mt-1 text-xl font-bold text-slate-900">
-                {estimatedWait !== null
-                  ? `~${estimatedWait} ${t("minutes")}`
-                  : "—"}
-              </p>
-            </div>
-          </div>
-        </section>
-
-        <section className="mt-4 rounded-2xl bg-white p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-slate-900">
-              {t("queueProgress")}
-            </h2>
-
-            <span className="text-xs font-semibold text-orange-600">
-              {t("waiting")}
-            </span>
-          </div>
-
-          <div className="mt-6 space-y-5">
-            <div className="flex gap-3">
-              <div className="flex flex-col items-center">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-600 text-sm text-white">
-                  ✓
-                </div>
-
-                <div className="mt-1 h-8 w-px bg-green-200"></div>
-              </div>
-
-              <div className="pt-1">
-                <p className="text-sm font-semibold text-slate-900">
-                  {t("slotBooked")}
-                </p>
-
-                <p className="mt-0.5 text-xs text-slate-500">
-                  {t("bookingConfirmed")}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-3">
-              <div className="flex flex-col items-center">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-orange-500 text-sm text-white">
-                  •
-                </div>
-
-                <div className="mt-1 h-8 w-px bg-slate-200"></div>
-              </div>
-
-              <div className="pt-1">
-                <p className="text-sm font-semibold text-slate-900">
-                  {t("waitingInQueue")}
-                </p>
-
-                <p className="mt-0.5 text-xs text-slate-500">
-                  {farmersAhead !== null
-                    ? t("farmersAhead", {
-                        count: farmersAhead,
-                      })
-                    : "Waiting for queue update"}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-3">
-              <div className="flex flex-col items-center">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-sm text-slate-400">
-                  3
-                </div>
-
-                <div className="mt-1 h-8 w-px bg-slate-200"></div>
-              </div>
-
-              <div className="pt-1">
-                <p className="text-sm font-medium text-slate-400">
-                  {t("procurement")}
-                </p>
-
-                <p className="mt-0.5 text-xs text-slate-400">
-                  {t("waitingForTurn")}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex gap-3">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-sm text-slate-400">
-                4
-              </div>
-
-              <div className="pt-1">
-                <p className="text-sm font-medium text-slate-400">
-                  {t("completed")}
-                </p>
-
-                <p className="mt-0.5 text-xs text-slate-400">
-                  {t("procurementCompleted")}
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <button
-          type="button"
-          onClick={loadBooking}
-          disabled={refreshing}
-          className={`mt-4 w-full rounded-xl border px-4 py-3 text-sm font-semibold shadow-sm transition ${
-            refreshing
-              ? "border-slate-200 bg-slate-100 text-slate-400"
-              : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-          }`}
-        >
-          {refreshing ? "↻ Refreshing..." : `🔄 ${t("refreshStatus")}`}
-        </button>
-
-        {lastUpdated && !refreshing && (
-          <p className="mt-2 text-center text-xs text-slate-400">
-            Last updated at{" "}
-            {lastUpdated.toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            })}
-          </p>
-        )}
-
-        <button
-          type="button"
-          onClick={() => navigate("/my-booking")}
-          className="mt-3 w-full rounded-xl bg-green-700 px-4 py-3 text-sm font-semibold text-white"
-        >
-          {t("viewBookingDetails")} →
-        </button>
-      </main>
-    </div>
+              <p className="mt-2 leading-5 text-slate-500">{data.etaBasis}</p>
+            </details>
+          )}
+        </>
+      )}
+    </FarmerLayout>
   );
 }
 

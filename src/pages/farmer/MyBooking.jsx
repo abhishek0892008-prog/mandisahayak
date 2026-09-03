@@ -1,676 +1,286 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
+import api from "../../lib/api";
+import useApiResource from "../../hooks/useApiResource";
+import {
+  ACTIVE_BOOKING_STATUSES,
+  translateDisplayStatus,
+  translateError,
+} from "../../lib/codes";
+import { formatDate, formatQuantity, formatTimeRange, kgToQuintal } from "../../lib/format";
+import FarmerLayout from "../../components/FarmerLayout";
+import {
+  DataTypeNote,
+  EmptyState,
+  ErrorState,
+  Loading,
+  StatusBadge,
+} from "../../components/StateViews";
+
+/**
+ * Bookings list, active and past.
+ *
+ * Cancellation is a server decision: the cutoff comes from
+ * `cancellation_cutoff_hours` and the transition is validated in the same
+ * transaction that writes the audit record (bookings.md §8). The client shows
+ * the button and reports what came back — it does not decide eligibility, and
+ * it never mutates a local array to fake the result.
+ */
 function MyBooking() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
 
-  const [bookings, setBookings] = useState([]);
-  const [history, setHistory] = useState([]);
-  const [farmer, setFarmer] = useState(null);
+  const [showHistory, setShowHistory] = useState(false);
+  const [confirming, setConfirming] = useState(null);
+  const [reason, setReason] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState(null);
+  const [notice, setNotice] = useState(null);
 
-  const loadBookings = () => {
-    const savedFarmer = localStorage.getItem("farmerData");
-
-    if (!savedFarmer) {
-      setFarmer(null);
-      setBookings([]);
-      setHistory([]);
-      return;
-    }
-
-    let currentFarmer;
-
-    try {
-      currentFarmer = JSON.parse(savedFarmer);
-    } catch {
-      setFarmer(null);
-      setBookings([]);
-      setHistory([]);
-      return;
-    }
-
-    setFarmer(currentFarmer);
-
-    const farmerPhone = String(
-      currentFarmer?.phone || ""
-    ).trim();
-
-    const farmerId =
-      currentFarmer?.farmerId ||
-      (farmerPhone ? `farmer-${farmerPhone}` : "");
-
-    if (!farmerId && !farmerPhone) {
-      setBookings([]);
-      setHistory([]);
-      return;
-    }
-
-    const savedBookings = localStorage.getItem("bookings");
-    const savedHistory = localStorage.getItem("bookingHistory");
-
-    let bookingList = [];
-    let historyList = [];
-
-    try {
-      const parsedBookings = savedBookings
-        ? JSON.parse(savedBookings)
-        : [];
-
-      if (Array.isArray(parsedBookings)) {
-        bookingList = parsedBookings;
-      }
-    } catch {
-      bookingList = [];
-    }
-
-    try {
-      const parsedHistory = savedHistory
-        ? JSON.parse(savedHistory)
-        : [];
-
-      if (Array.isArray(parsedHistory)) {
-        historyList = parsedHistory;
-      }
-    } catch {
-      historyList = [];
-    }
-
-    const belongsToFarmer = (booking) => {
-      if (!booking) return false;
-
-      if (booking.farmerId) {
-        return booking.farmerId === farmerId;
-      }
-
-      if (booking.farmerPhone) {
-        return (
-          String(booking.farmerPhone).trim() === farmerPhone
-        );
-      }
-
-      return false;
-    };
-
-    const farmerBookings = bookingList.filter(
-      belongsToFarmer
-    );
-
-    const farmerHistory = historyList.filter(
-      belongsToFarmer
-    );
-
-    const sortedBookings = [...farmerBookings].sort(
-      (a, b) => {
-        const dateA = new Date(
-          `${a.date || ""}T00:00:00`
-        ).getTime();
-
-        const dateB = new Date(
-          `${b.date || ""}T00:00:00`
-        ).getTime();
-
-        if (dateA !== dateB) {
-          return dateA - dateB;
-        }
-
-        return (
-          new Date(b.createdAt || 0).getTime() -
-          new Date(a.createdAt || 0).getTime()
-        );
-      }
-    );
-
-    const sortedHistory = [...farmerHistory].sort(
-      (a, b) => {
-        const dateA = new Date(
-          b.cancelledAt ||
-            b.completedAt ||
-            b.createdAt ||
-            `${b.date || ""}T00:00:00`
-        ).getTime();
-
-        const dateB = new Date(
-          a.cancelledAt ||
-            a.completedAt ||
-            a.createdAt ||
-            `${a.date || ""}T00:00:00`
-        ).getTime();
-
-        return dateA - dateB;
-      }
-    );
-
-    setBookings(sortedBookings);
-    setHistory(sortedHistory);
-  };
-
-  useEffect(() => {
-    loadBookings();
-
-    window.addEventListener("focus", loadBookings);
-    window.addEventListener("bookingUpdated", loadBookings);
-
-    return () => {
-      window.removeEventListener("focus", loadBookings);
-      window.removeEventListener(
-        "bookingUpdated",
-        loadBookings
-      );
-    };
-  }, []);
-
-  const changeLanguage = (language) => {
-    i18n.changeLanguage(language);
-  };
-
-  const activeBookings = bookings.filter(
-    (item) =>
-      item.status !== "Cancelled" &&
-      item.status !== "Completed"
+  const bookings = useApiResource(
+    (signal) => api.myBookings(showHistory, signal),
+    [showHistory],
   );
 
-  const getQuantity = (booking) => {
-    if (booking?.quantityQuintal !== undefined) {
-      return booking.quantityQuintal;
-    }
+  const locale = i18n.language;
+  const all = bookings.data ?? [];
 
-    if (booking?.quantityUnit === "quintal") {
-      return booking.quantity ?? 0;
-    }
+  const active = all.filter((booking) => ACTIVE_BOOKING_STATUSES.has(booking.status));
+  const past = all.filter((booking) => !ACTIVE_BOOKING_STATUSES.has(booking.status));
 
-    return booking?.quantity ?? 0;
-  };
+  async function handleCancel() {
+    if (!confirming) return;
 
-  const getQuantityUnit = () => {
-    return t("quintal");
-  };
-
-  const handleCancel = (bookingId) => {
-    const savedFarmer = localStorage.getItem("farmerData");
-
-    if (!savedFarmer) return;
-
-    let currentFarmer;
+    setCancelling(true);
+    setCancelError(null);
 
     try {
-      currentFarmer = JSON.parse(savedFarmer);
-    } catch {
-      return;
+      await api.cancelBooking(confirming.bookingCode, reason.trim() || undefined);
+
+      setConfirming(null);
+      setReason("");
+      setNotice(t("bookingCancelled"));
+
+      // Refetch rather than splicing the local array: the server owns the
+      // resulting status, and a cancelled booking may change what else is
+      // shown.
+      bookings.reload();
+    } catch (error) {
+      setCancelError(error);
+    } finally {
+      setCancelling(false);
     }
+  }
 
-    const farmerPhone = String(
-      currentFarmer?.phone || ""
-    ).trim();
+  function renderBooking(booking) {
+    const zone = booking.centre?.timezone;
+    const cancellable = booking.status === "CONFIRMED";
 
-    const farmerId =
-      currentFarmer?.farmerId ||
-      (farmerPhone ? `farmer-${farmerPhone}` : "");
-
-    if (!farmerId && !farmerPhone) return;
-
-    const savedBookings = localStorage.getItem("bookings");
-    const savedHistory =
-      localStorage.getItem("bookingHistory");
-
-    let allBookings = [];
-    let allHistory = [];
-
-    try {
-      const parsedBookings = savedBookings
-        ? JSON.parse(savedBookings)
-        : [];
-
-      if (Array.isArray(parsedBookings)) {
-        allBookings = parsedBookings;
-      }
-    } catch {
-      allBookings = [];
-    }
-
-    try {
-      const parsedHistory = savedHistory
-        ? JSON.parse(savedHistory)
-        : [];
-
-      if (Array.isArray(parsedHistory)) {
-        allHistory = parsedHistory;
-      }
-    } catch {
-      allHistory = [];
-    }
-
-    const belongsToCurrentFarmer = (booking) => {
-      if (!booking) return false;
-
-      if (booking.farmerId) {
-        return booking.farmerId === farmerId;
-      }
-
-      if (booking.farmerPhone) {
-        return (
-          String(booking.farmerPhone).trim() ===
-          farmerPhone
-        );
-      }
-
-      return false;
-    };
-
-    const selectedBooking = allBookings.find(
-      (item) =>
-        item.bookingId === bookingId &&
-        belongsToCurrentFarmer(item)
-    );
-
-    if (!selectedBooking) return;
-
-    const cancelledBooking = {
-      ...selectedBooking,
-      farmerId,
-      farmerPhone,
-      status: "Cancelled",
-      cancelledAt: new Date().toISOString(),
-    };
-
-    const updatedAllBookings = allBookings.filter(
-      (item) =>
-        !(
-          item.bookingId === bookingId &&
-          belongsToCurrentFarmer(item)
-        )
-    );
-
-    const existingHistory = allHistory.filter(
-      (item) =>
-        !(
-          item.bookingId === bookingId &&
-          belongsToCurrentFarmer(item)
-        )
-    );
-
-    const updatedAllHistory = [
-      cancelledBooking,
-      ...existingHistory,
-    ];
-
-    localStorage.setItem(
-      "bookings",
-      JSON.stringify(updatedAllBookings)
-    );
-
-    localStorage.setItem(
-      "bookingHistory",
-      JSON.stringify(updatedAllHistory)
-    );
-
-    const savedCurrentBooking =
-      localStorage.getItem("bookingData");
-
-    if (savedCurrentBooking) {
-      try {
-        const currentBooking = JSON.parse(
-          savedCurrentBooking
-        );
-
-        const isCurrentBooking =
-          currentBooking?.bookingId === bookingId &&
-          belongsToCurrentFarmer(currentBooking);
-
-        if (isCurrentBooking) {
-          const nextBooking = updatedAllBookings
-            .filter(
-              (item) =>
-                belongsToCurrentFarmer(item) &&
-                item.status !== "Cancelled" &&
-                item.status !== "Completed"
-            )
-            .sort((a, b) => {
-              const dateA = new Date(
-                `${a.date || ""}T00:00:00`
-              ).getTime();
-
-              const dateB = new Date(
-                `${b.date || ""}T00:00:00`
-              ).getTime();
-
-              if (dateA !== dateB) {
-                return dateA - dateB;
-              }
-
-              return (
-                new Date(
-                  b.createdAt || 0
-                ).getTime() -
-                new Date(
-                  a.createdAt || 0
-                ).getTime()
-              );
-            })[0];
-
-          if (nextBooking) {
-            localStorage.setItem(
-              "bookingData",
-              JSON.stringify(nextBooking)
-            );
-          } else {
-            localStorage.removeItem("bookingData");
-          }
-        }
-      } catch {
-        localStorage.removeItem("bookingData");
-      }
-    }
-
-    loadBookings();
-    window.dispatchEvent(new Event("bookingUpdated"));
-  };
-
-  return (
-    <div className="min-h-screen bg-slate-50 pb-24">
-      <header className="bg-green-700 text-white">
-        <div className="mx-auto w-full max-w-lg px-4 py-4">
-          <div className="flex items-center justify-between">
-            <button
-              type="button"
-              onClick={() => navigate("/dashboard")}
-              className="flex h-10 w-10 items-center justify-center rounded-full text-2xl hover:bg-white/10"
-            >
-              ←
-            </button>
-
-            <div className="flex items-center rounded-full bg-white/15 p-1">
-              <button
-                type="button"
-                onClick={() => changeLanguage("en")}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                  i18n.language === "en"
-                    ? "bg-white text-green-700"
-                    : "text-white"
-                }`}
-              >
-                {t("english")}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => changeLanguage("hi")}
-                className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                  i18n.language === "hi"
-                    ? "bg-white text-green-700"
-                    : "text-white"
-                }`}
-              >
-                {t("hindi")}
-              </button>
-            </div>
+    return (
+      <article key={booking.bookingCode} className="rounded-2xl bg-white p-4 shadow-sm">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="truncate font-semibold text-slate-900">{booking.centre?.name}</h3>
+            <p className="mt-0.5 text-xs text-slate-400">{booking.bookingCode}</p>
           </div>
 
-          <div className="mt-5">
-            <h1 className="text-2xl font-bold">
-              {t("myBooking")}
-            </h1>
+          <StatusBadge
+            status={booking.status}
+            label={translateDisplayStatus(t, booking.displayStatus)}
+          />
+        </div>
 
-            <p className="mt-1 text-sm text-green-100">
-              {t("manageYourBooking")}
+        <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <p className="text-xs text-slate-500">{t("crop")}</p>
+            <p className="font-medium text-slate-800">{booking.crop?.name}</p>
+          </div>
+
+          <div>
+            <p className="text-xs text-slate-500">{t("quantity")}</p>
+            <p className="font-medium text-slate-800">
+              {formatQuantity(kgToQuintal(booking.quantityKg), locale)} {t("quintal")}
             </p>
+          </div>
+
+          <div>
+            <p className="text-xs text-slate-500">{t("date")}</p>
+            <p className="font-medium text-slate-800">
+              {formatDate(booking.serviceDate, zone, locale)}
+            </p>
+          </div>
+
+          <div>
+            <p className="text-xs text-slate-500">{t("tokenNumberLabel")}</p>
+            <p className="font-medium text-slate-800">{booking.tokenNumber ?? "—"}</p>
           </div>
         </div>
-      </header>
 
-      <main className="mx-auto w-full max-w-lg px-4 py-5">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900">
-              {t("currentBooking")}
-            </h2>
+        <div className="mt-3 rounded-xl bg-slate-50 p-3">
+          <p className="text-xs text-slate-500">{t("arriveBy")}</p>
+          <p className="mt-0.5 text-sm font-semibold text-slate-800">
+            {formatTimeRange(booking.scheduledStartAt, booking.processingEndAt, zone, locale) ?? "—"}
+          </p>
+        </div>
 
-            <p className="mt-1 text-sm text-slate-500">
-              {activeBookings.length} {t("records")}
-            </p>
-          </div>
+        <DataTypeNote dataType={booking.centre?.dataType} />
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => navigate("/queue", { state: { bookingCode: booking.bookingCode } })}
+            className="flex-1 rounded-xl bg-green-700 px-3 py-2.5 text-xs font-semibold text-white"
+          >
+            {t("queueStatus")}
+          </button>
 
           <button
             type="button"
-            onClick={() => navigate("/book-slot")}
-            className="rounded-xl bg-green-700 px-3 py-2 text-xs font-semibold text-white"
+            onClick={() =>
+              navigate("/procurement", { state: { bookingCode: booking.bookingCode } })
+            }
+            className="flex-1 rounded-xl border border-slate-200 px-3 py-2.5 text-xs font-semibold text-slate-700"
           >
-            + {t("bookSlot")}
+            {t("procurement")}
           </button>
-        </div>
 
-        {activeBookings.length > 0 ? (
-          <div className="space-y-4">
-            {activeBookings.map((booking) => (
-              <section
-                key={booking.bookingId}
-                className="overflow-hidden rounded-2xl bg-white shadow-sm"
-              >
-                <div className="flex items-center justify-between border-b border-slate-100 p-4">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-wide text-green-700">
-                      {t("bookingDetails")}
-                    </p>
-
-                    <p className="mt-1 text-sm font-semibold text-slate-900">
-                      {booking.bookingId}
-                    </p>
-                  </div>
-
-                  <span className="rounded-full bg-green-50 px-3 py-1.5 text-xs font-semibold text-green-700">
-                    {booking.status || t("confirmed")}
-                  </span>
-                </div>
-
-                <div className="space-y-4 p-4">
-                  <div className="rounded-xl bg-green-50 p-4 text-center">
-                    <p className="text-xs text-slate-500">
-                      {t("tokenNumber")}
-                    </p>
-
-                    <p className="mt-1 text-2xl font-bold text-green-700">
-                      {booking.tokenNumber ||
-                        booking.bookingId ||
-                        "—"}
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-xl bg-slate-50 p-3">
-                      <p className="text-xs text-slate-500">
-                        {t("procurementCentre")}
-                      </p>
-
-                      <p className="mt-1 text-sm font-semibold text-slate-900">
-                        {booking.centre}
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl bg-slate-50 p-3">
-                      <p className="text-xs text-slate-500">
-                        {t("crop")}
-                      </p>
-
-                      <p className="mt-1 text-sm font-semibold text-slate-900">
-                        {booking.crop}
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl bg-slate-50 p-3">
-                      <p className="text-xs text-slate-500">
-                        {t("quantity")}
-                      </p>
-
-                      <p className="mt-1 text-sm font-semibold text-slate-900">
-                        {getQuantity(booking)}{" "}
-                        {getQuantityUnit(booking)}
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl bg-slate-50 p-3">
-                      <p className="text-xs text-slate-500">
-                        {t("date")}
-                      </p>
-
-                      <p className="mt-1 text-sm font-semibold text-slate-900">
-                        {booking.date}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-slate-100 p-4">
-                    <p className="text-xs text-slate-500">
-                      {t("timeSlot")}
-                    </p>
-
-                    <p className="mt-1 text-sm font-semibold text-slate-900">
-                      {booking.timeSlot}
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => navigate("/queue")}
-                    className="w-full rounded-xl bg-green-700 px-4 py-3 text-sm font-semibold text-white"
-                  >
-                    {t("viewQueueStatus")} →
-                  </button>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => navigate("/book-slot")}
-                      className="rounded-xl bg-green-50 px-3 py-3 text-sm font-semibold text-green-700"
-                    >
-                      {t("changeBooking")}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleCancel(booking.bookingId)
-                      }
-                      className="rounded-xl bg-red-50 px-3 py-3 text-sm font-semibold text-red-600"
-                    >
-                      {t("cancelBooking")}
-                    </button>
-                  </div>
-                </div>
-              </section>
-            ))}
-          </div>
-        ) : (
-          <section className="rounded-2xl bg-white p-6 text-center shadow-sm">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-green-50 text-3xl">
-              📅
-            </div>
-
-            <h2 className="mt-4 text-lg font-bold text-slate-900">
-              {t("noActiveBooking")}
-            </h2>
-
-            <p className="mt-2 text-sm text-slate-500">
-              {t("noActiveBookingDescription")}
-            </p>
-
+          {cancellable && (
             <button
               type="button"
-              onClick={() => navigate("/book-slot")}
-              className="mt-5 w-full rounded-xl bg-green-700 px-4 py-3 text-sm font-semibold text-white"
+              onClick={() => {
+                setConfirming(booking);
+                setCancelError(null);
+                setReason("");
+              }}
+              className="flex-1 rounded-xl border border-red-200 px-3 py-2.5 text-xs font-semibold text-red-700"
             >
-              {t("bookSlot")} →
+              {t("cancelBooking")}
             </button>
-          </section>
-        )}
+          )}
+        </div>
+      </article>
+    );
+  }
 
-        <section className="mt-7">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-lg font-bold text-slate-900">
-              {t("bookingHistory")}
-            </h2>
+  return (
+    <FarmerLayout
+      title={t("myBooking")}
+      subtitle={t("slotDetails")}
+      onBack={() => navigate("/dashboard")}
+    >
+      {notice && (
+        <div className="mb-4 rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+          {notice}
+        </div>
+      )}
 
-            <span className="text-xs text-slate-400">
-              {history.length} {t("records")}
-            </span>
-          </div>
+      {bookings.error && <ErrorState error={bookings.error} onRetry={bookings.reload} />}
 
-          {history.length > 0 ? (
-            <div className="space-y-3">
-              {history.map((item, index) => (
-                <div
-                  key={`${item.bookingId}-${index}`}
-                  className="rounded-2xl bg-white p-4 shadow-sm"
+      {bookings.initialLoading && <Loading />}
+
+      {!bookings.initialLoading && !bookings.error && (
+        <>
+          {active.length === 0 && past.length === 0 ? (
+            <EmptyState
+              icon="🎟️"
+              title={t("noBookingsYet")}
+              description={t("noBookingsDescription")}
+              action={
+                <button
+                  type="button"
+                  onClick={() => navigate("/book-slot")}
+                  className="mt-5 w-full rounded-xl bg-green-700 px-4 py-3 text-sm font-semibold text-white"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">
-                        {item.crop}
-                      </p>
-
-                      <p className="mt-1 text-xs text-slate-500">
-                        {item.centre}
-                      </p>
-
-                      <p className="mt-1 text-xs text-slate-400">
-                        {item.bookingId}
-                      </p>
-                    </div>
-
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                        item.status === "Completed"
-                          ? "bg-green-50 text-green-600"
-                          : "bg-red-50 text-red-600"
-                      }`}
-                    >
-                      {item.status}
-                    </span>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-2 gap-3">
-                    <div>
-                      <p className="text-xs text-slate-400">
-                        {t("date")}
-                      </p>
-
-                      <p className="mt-1 text-sm text-slate-700">
-                        {item.date}
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="text-xs text-slate-400">
-                        {t("quantity")}
-                      </p>
-
-                      <p className="mt-1 text-sm text-slate-700">
-                        {getQuantity(item)}{" "}
-                        {getQuantityUnit(item)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                  {t("bookSlot")} →
+                </button>
+              }
+            />
           ) : (
-            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-6 text-center">
-              <div className="text-2xl">
-                📋
-              </div>
+            <div className="space-y-3">
+              {active.length > 0 && (
+                <h2 className="text-sm font-semibold text-slate-500">{t("activeBookings")}</h2>
+              )}
 
-              <p className="mt-2 text-sm font-medium text-slate-700">
-                {t("noBookingHistory")}
-              </p>
+              {active.map(renderBooking)}
 
-              <p className="mt-1 text-xs text-slate-400">
-                {t("bookingHistoryDescription")}
-              </p>
+              {showHistory && past.length > 0 && (
+                <>
+                  <h2 className="pt-3 text-sm font-semibold text-slate-500">{t("pastBookings")}</h2>
+                  {past.map(renderBooking)}
+                </>
+              )}
             </div>
           )}
-        </section>
-      </main>
-    </div>
+
+          <button
+            type="button"
+            onClick={() => setShowHistory((value) => !value)}
+            className="mt-4 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700"
+          >
+            {showHistory ? t("hideHistory") : t("showHistory")}
+          </button>
+        </>
+      )}
+
+      {/* Cancellation confirmation ---------------------------------- */}
+      {confirming && (
+        <div className="fixed inset-0 z-30 flex items-end justify-center bg-black/40 p-4 sm:items-center">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+            <h3 className="text-lg font-bold text-slate-900">{t("cancelBookingConfirm")}</h3>
+
+            <p className="mt-1 text-sm text-slate-500">{t("cancelBookingWarning")}</p>
+
+            <p className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700">
+              {confirming.bookingCode}
+            </p>
+
+            <label htmlFor="cancelReason" className="mt-4 block text-sm font-medium text-slate-700">
+              {t("cancelReason")}
+            </label>
+
+            <input
+              id="cancelReason"
+              type="text"
+              value={reason}
+              maxLength={280}
+              onChange={(event) => setReason(event.target.value)}
+              placeholder={t("cancelReasonPlaceholder")}
+              className="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:border-green-600"
+            />
+
+            {cancelError && <ErrorState error={cancelError} className="mt-3" />}
+
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirming(null)}
+                disabled={cancelling}
+                className="flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-700"
+              >
+                {t("keepBooking")}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleCancel}
+                disabled={cancelling}
+                className="flex-1 rounded-xl bg-red-700 px-4 py-3 text-sm font-semibold text-white disabled:bg-red-300"
+              >
+                {cancelling ? t("cancelling") : t("cancelBooking")}
+              </button>
+            </div>
+
+            {cancelError && (
+              <p className="mt-2 text-center text-xs text-slate-400">
+                {translateError(t, cancelError)}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </FarmerLayout>
   );
 }
 

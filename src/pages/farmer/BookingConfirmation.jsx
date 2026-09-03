@@ -1,175 +1,126 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
+import { formatDate, formatQuantity, formatTimeRange, kgToQuintal } from "../../lib/format";
+import { translateDisplayStatus } from "../../lib/codes";
+import LanguageToggle from "../../components/LanguageToggle";
+import { DataTypeNote } from "../../components/StateViews";
+
+/**
+ * Booking confirmation.
+ *
+ * Renders the server's `POST /bookings` response, which is the only place the
+ * booking code and token exist — both are minted server-side and the client
+ * never generates either (bookings.md §5.1).
+ *
+ * The prototype's 3-second auto-redirect is gone: it took the confirmation off
+ * screen before a farmer could write down the token they are called by.
+ */
 function BookingConfirmation() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const [booking, setBooking] = useState(null);
+  const booking = location.state?.booking ?? null;
 
-  useEffect(() => {
-    const savedBooking = localStorage.getItem("bookingData");
-
-    if (!savedBooking) {
-      navigate("/dashboard", { replace: true });
-      return;
-    }
-
-    try {
-      const parsedBooking = JSON.parse(savedBooking);
-      setBooking(parsedBooking);
-    } catch (error) {
-      console.error("Unable to read booking data:", error);
-      navigate("/dashboard", { replace: true });
-    }
-  }, [navigate]);
-
-  useEffect(() => {
-    if (!booking) return;
-
-    const timer = setTimeout(() => {
-      navigate("/dashboard", { replace: true });
-    }, 3000);
-
-    return () => clearTimeout(timer);
-  }, [booking, navigate]);
-
-  const changeLanguage = (language) => {
-    i18n.changeLanguage(language);
-  };
-
+  // Reached directly or after a refresh: there is nothing to confirm, and the
+  // booking list is the honest place to send them.
   if (!booking) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-green-200 border-t-green-700" />
-      </div>
-    );
+    return <Navigate to="/my-booking" replace />;
   }
+
+  const locale = i18n.language;
+  const zone = booking.centre?.timezone;
+  const quantityQuintal = kgToQuintal(booking.quantityKg);
 
   return (
     <div className="min-h-screen bg-slate-50">
-
-      {/* Header */}
       <header className="bg-green-700 text-white">
         <div className="mx-auto flex w-full max-w-lg items-center justify-end px-4 py-4">
-
-          <div className="flex items-center rounded-full bg-white/15 p-1">
-
-            <button
-              type="button"
-              onClick={() => changeLanguage("en")}
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                i18n.language === "en"
-                  ? "bg-white text-green-700"
-                  : "text-white"
-              }`}
-            >
-              {t("english")}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => changeLanguage("hi")}
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                i18n.language === "hi"
-                  ? "bg-white text-green-700"
-                  : "text-white"
-              }`}
-            >
-              {t("hindi")}
-            </button>
-
-          </div>
-
+          <LanguageToggle />
         </div>
       </header>
 
-      {/* Main */}
-      <main className="mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-lg items-center justify-center px-4 py-10">
-
-        <div className="w-full rounded-3xl bg-white px-6 py-10 text-center shadow-sm">
-
-          {/* Success icon */}
+      <main className="mx-auto w-full max-w-lg px-4 py-8">
+        <div className="rounded-3xl bg-white px-6 py-10 text-center shadow-sm">
           <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-green-100">
-
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-600 text-3xl font-bold text-white shadow-sm">
               ✓
             </div>
-
           </div>
 
-          {/* Success message */}
-          <h1 className="mt-7 text-2xl font-bold text-slate-900">
-            {t("bookingConfirmedTitle")}
-          </h1>
+          <h1 className="mt-7 text-2xl font-bold text-slate-900">{t("bookingConfirmedTitle")}</h1>
 
           <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-slate-500">
             {t("bookingConfirmedMessage")}
           </p>
 
-          {/* Booking ID */}
-          <div className="mt-7 rounded-2xl border border-green-100 bg-green-50 p-4">
+          {/* The two identifiers do different jobs and are shown as two
+              things: the code is the farmer's reference, the token is the
+              number called out at the centre that day. */}
+          <div className="mt-7 grid grid-cols-2 gap-3">
+            <div className="rounded-2xl border border-green-100 bg-green-50 p-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-green-700">
+                {t("bookingCode")}
+              </p>
 
-            <p className="text-xs font-medium uppercase tracking-wide text-green-700">
-              {t("bookingIdLabel")}
-            </p>
+              <p className="mt-1 text-lg font-bold tracking-wide text-slate-900">
+                {booking.bookingCode}
+              </p>
+            </div>
 
-            <p className="mt-1 text-xl font-bold tracking-wide text-slate-900">
-              {booking.bookingId}
-            </p>
+            <div className="rounded-2xl border border-green-100 bg-green-50 p-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-green-700">
+                {t("tokenNumberLabel")}
+              </p>
 
+              <p className="mt-1 text-lg font-bold tracking-wide text-slate-900">
+                {booking.tokenNumber}
+              </p>
+            </div>
           </div>
 
-          {/* Booking summary */}
           <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50 p-4 text-left">
-
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <span className="text-sm text-slate-500">
-                {t("crop")}
-              </span>
-
-              <span className="text-sm font-semibold text-slate-900">
-                {booking.crop}
+              <span className="text-sm text-slate-500">{t("procurementCentre")}</span>
+              <span className="text-right text-sm font-semibold text-slate-900">
+                {booking.centre?.name}
               </span>
             </div>
 
             <div className="flex items-center justify-between border-b border-slate-200 py-3">
-              <span className="text-sm text-slate-500">
-                {t("date")}
-              </span>
+              <span className="text-sm text-slate-500">{t("crop")}</span>
+              <span className="text-sm font-semibold text-slate-900">{booking.crop?.name}</span>
+            </div>
 
+            <div className="flex items-center justify-between border-b border-slate-200 py-3">
+              <span className="text-sm text-slate-500">{t("quantity")}</span>
               <span className="text-sm font-semibold text-slate-900">
-                {booking.date}
+                {formatQuantity(quantityQuintal, locale)} {t("quintal")}
               </span>
             </div>
 
-            <div className="flex items-center justify-between pt-3">
-              <span className="text-sm text-slate-500">
-                {t("timeSlot")}
+            <div className="flex items-center justify-between border-b border-slate-200 py-3">
+              <span className="text-sm text-slate-500">{t("date")}</span>
+              <span className="text-sm font-semibold text-slate-900">
+                {formatDate(booking.serviceDate, zone, locale)}
               </span>
+            </div>
 
+            <div className="flex items-center justify-between py-3">
+              <span className="text-sm text-slate-500">{t("arriveBy")}</span>
               <span className="text-right text-sm font-semibold text-slate-900">
-                {booking.timeSlot}
+                {formatTimeRange(booking.scheduledStartAt, booking.processingEndAt, zone, locale)}
               </span>
             </div>
 
+            <DataTypeNote dataType={booking.centre?.dataType} />
           </div>
 
-          {/* Redirect message */}
-          <div className="mt-7">
+          <p className="mt-4 text-xs text-slate-400">
+            {t("statusLabel")}: {translateDisplayStatus(t, booking.displayStatus)}
+          </p>
 
-            <div className="mx-auto h-1.5 w-32 overflow-hidden rounded-full bg-slate-100">
-              <div className="h-full w-full animate-pulse rounded-full bg-green-600" />
-            </div>
-
-            <p className="mt-3 text-xs text-slate-400">
-              {t("redirectingToDashboard")}
-            </p>
-
-          </div>
-
-          {/* Manual button */}
           <button
             type="button"
             onClick={() => navigate("/dashboard", { replace: true })}
@@ -178,10 +129,15 @@ function BookingConfirmation() {
             {t("goToDashboard")}
           </button>
 
+          <button
+            type="button"
+            onClick={() => navigate("/my-booking", { replace: true })}
+            className="mt-3 min-h-12 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700"
+          >
+            {t("myBooking")}
+          </button>
         </div>
-
       </main>
-
     </div>
   );
 }

@@ -1,0 +1,28 @@
+{
+  "name": "farmqueue-server",
+  "private": true,
+  "version": "0.14.0",
+  "type": "module",
+  "description": "FarmQueue backend — Phase 14: officer provisioning. Notifications are DEMO delivery only.",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --test-concurrency=1 tests/*.test.ts",
+    "static-check": "node scripts/static-check.mjs",
+    "dev": "node --env-file-if-exists=.env --watch src/index.ts"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "pg": "^8.13.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.5",
+    "@types/pg": "^8.11.10",
+    "typescript": "^5.7.3"
+  }
+}
