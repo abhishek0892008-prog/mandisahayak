@@ -5,10 +5,21 @@ import api from "../../lib/api";
 import useApiResource from "../../hooks/useApiResource";
 import useOfficerCentre from "../../hooks/useOfficerCentre";
 import { translateDisplayStatus } from "../../lib/codes";
-import { formatDate, formatQuantity, kgToQuintal, todayInZone } from "../../lib/format";
+import {
+  formatDate,
+  formatQuantity,
+  formatTimeRange,
+  kgToQuintal,
+  todayInZone,
+} from "../../lib/format";
 import OfficerLayout from "../../components/OfficerLayout";
 import CentrePicker from "../../components/CentrePicker";
-import { EmptyState, ErrorState, Loading, StatusBadge } from "../../components/StateViews";
+import {
+  EmptyState,
+  ErrorState,
+  Loading,
+  StatusBadge,
+} from "../../components/StateViews";
 
 /**
  * The day's record.
@@ -31,7 +42,8 @@ function ReportsPage() {
   const effectiveDate = date ?? todayInZone(centre.timezone);
 
   const bookings = useApiResource(
-    (signal) => api.centreBookings(centre.centreId, { date: effectiveDate }, signal),
+    (signal) =>
+      api.centreBookings(centre.centreId, { date: effectiveDate }, signal),
     [centre.centreId, effectiveDate],
     { enabled: Boolean(centre.centreId) },
   );
@@ -39,11 +51,20 @@ function ReportsPage() {
   const rows = bookings.data ?? [];
   const locale = i18n.language;
 
-  const completed = rows.filter((row) => ["COMPLETED", "PAYMENT_PENDING"].includes(row.status));
+  const completed = rows.filter((row) =>
+    ["COMPLETED", "PAYMENT_PENDING"].includes(row.status),
+  );
   const noShows = rows.filter((row) => row.status === "NO_SHOW");
   const cancelled = rows.filter((row) => row.status === "CANCELLED");
 
-  const declaredKg = rows.reduce((total, row) => total + Number(row.quantityKg ?? 0), 0);
+  const declaredKg = rows.reduce(
+    (total, row) => total + Number(row.quantityKg ?? 0),
+    0,
+  );
+
+  function handlePrint() {
+    window.print();
+  }
 
   const byCrop = rows.reduce((map, row) => {
     const name = row.crop?.name ?? "—";
@@ -71,15 +92,29 @@ function ReportsPage() {
             onChange={(event) => setDate(event.target.value)}
             className="rounded-full border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-emerald-600"
           />
+
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="print-hidden rounded-full bg-emerald-800 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-900"
+          >
+            Print report
+          </button>
         </div>
       }
     >
-      {bookings.error && <ErrorState error={bookings.error} onRetry={bookings.reload} />}
+      {bookings.error && (
+        <ErrorState error={bookings.error} onRetry={bookings.reload} />
+      )}
 
       {(centre.loading || bookings.initialLoading) && <Loading />}
 
       {!bookings.initialLoading && rows.length === 0 && !bookings.error && (
-        <EmptyState icon="📊" title={t("noBookingsToday")} description={t("noBookingsTodayNote")} />
+        <EmptyState
+          icon="📊"
+          title={t("noBookingsToday")}
+          description={t("noBookingsTodayNote")}
+        />
       )}
 
       {rows.length > 0 && (
@@ -92,12 +127,16 @@ function ReportsPage() {
 
               <p className="mt-2 text-3xl font-black text-slate-900">
                 {formatQuantity(kgToQuintal(declaredKg), locale)}{" "}
-                <span className="text-base font-semibold text-slate-500">{t("quintal")}</span>
+                <span className="text-base font-semibold text-slate-500">
+                  {t("quintal")}
+                </span>
               </p>
 
               {/* Declared, not procured: the accepted figure is per booking and
                   only exists once quality has been recorded. */}
-              <p className="mt-1 text-xs text-slate-400">{t("declaredTotalNote")}</p>
+              <p className="mt-1 text-xs text-slate-400">
+                {t("declaredTotalNote")}
+              </p>
             </div>
 
             <div className="rounded-2xl border border-emerald-100 bg-white p-4">
@@ -119,49 +158,96 @@ function ReportsPage() {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-emerald-100 text-left text-xs uppercase tracking-wide text-emerald-800/80">
-                  <th className="px-3 py-3">{t("tokenNumberLabel")}</th>
-                  <th className="px-3 py-3">{t("bookingCode")}</th>
-                  <th className="px-3 py-3">{t("crop")}</th>
-                  <th className="px-3 py-3">{t("quantity")}</th>
-                  <th className="px-3 py-3">{t("date")}</th>
-                  <th className="px-3 py-3">{t("statusLabel")}</th>
-                </tr>
-              </thead>
+          <section className="report-sheet">
+            <div className="mb-4 hidden print:block">
+              <h1 className="text-xl font-black text-slate-900">
+                {t("appName")}
+              </h1>
+              <p className="mt-1 text-sm text-slate-600">
+                {t("reports")} · {centre.centre?.name ?? t("procurementCentre")}
+              </p>
+              <p className="text-sm text-slate-600">
+                {formatDate(effectiveDate, centre.timezone, locale)}
+              </p>
+            </div>
 
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.bookingCode} className="border-b border-slate-100">
-                    <td className="px-3 py-3 font-black text-slate-900">{row.tokenNumber}</td>
-
-                    <td className="px-3 py-3 font-mono text-xs text-slate-500">
-                      {row.bookingCode}
-                    </td>
-
-                    <td className="px-3 py-3 text-slate-800">{row.crop?.name}</td>
-
-                    <td className="px-3 py-3 text-slate-800">
-                      {formatQuantity(kgToQuintal(row.quantityKg), locale)} {t("quintal")}
-                    </td>
-
-                    <td className="px-3 py-3 text-slate-800">
-                      {formatDate(row.serviceDate, centre.timezone, locale)}
-                    </td>
-
-                    <td className="px-3 py-3">
-                      <StatusBadge
-                        status={row.status}
-                        label={translateDisplayStatus(t, row.displayStatus)}
-                      />
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[980px] border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-emerald-100 text-left text-xs uppercase tracking-wide text-emerald-800/80">
+                    <th className="px-3 py-3">{t("tokenNumberLabel")}</th>
+                    <th className="px-3 py-3">Farmer name</th>
+                    <th className="px-3 py-3">Phone</th>
+                    <th className="px-3 py-3">{t("bookingCode")}</th>
+                    <th className="px-3 py-3">{t("crop")}</th>
+                    <th className="px-3 py-3">{t("quantity")}</th>
+                    <th className="px-3 py-3">{t("date")}</th>
+                    <th className="px-3 py-3">{t("arriveBy")}</th>
+                    <th className="px-3 py-3">{t("lane")}</th>
+                    <th className="px-3 py-3">{t("statusLabel")}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+
+                <tbody>
+                  {rows.map((row) => (
+                    <tr
+                      key={row.bookingCode}
+                      className="border-b border-slate-100"
+                    >
+                      <td className="px-3 py-3 font-black text-slate-900">
+                        {row.tokenNumber}
+                      </td>
+
+                      <td className="px-3 py-3 text-slate-800">
+                        {row.farmer?.fullName ?? row.farmer?.name ?? "—"}
+                      </td>
+
+                      <td className="px-3 py-3 text-slate-800">
+                        {row.farmer?.phoneE164 ?? "—"}
+                      </td>
+
+                      <td className="px-3 py-3 font-mono text-xs text-slate-500">
+                        {row.bookingCode}
+                      </td>
+
+                      <td className="px-3 py-3 text-slate-800">
+                        {row.crop?.name}
+                      </td>
+
+                      <td className="px-3 py-3 text-slate-800">
+                        {formatQuantity(kgToQuintal(row.quantityKg), locale)}{" "}
+                        {t("quintal")}
+                      </td>
+
+                      <td className="px-3 py-3 text-slate-800">
+                        {formatDate(row.serviceDate, centre.timezone, locale)}
+                      </td>
+
+                      <td className="px-3 py-3 text-slate-800">
+                        {formatTimeRange(
+                          row.scheduledStartAt,
+                          row.processingEndAt,
+                          centre.timezone,
+                          locale,
+                        ) ?? "—"}
+                      </td>
+
+                      <td className="px-3 py-3 text-slate-800">
+                        {row.laneNo ?? "—"}
+                      </td>
+
+                      <td className="px-3 py-3">
+                        <StatusBadge
+                          status={row.status}
+                          label={translateDisplayStatus(t, row.displayStatus)}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
         </>
       )}
     </OfficerLayout>

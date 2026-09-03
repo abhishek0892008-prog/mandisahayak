@@ -1,1 +1,28 @@
 @import "tailwindcss";
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+
+  .report-sheet,
+  .report-sheet * {
+    visibility: visible;
+  }
+
+  .report-sheet {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+
+  .report-sheet table {
+    font-size: 10px;
+  }
+
+  .report-sheet th,
+  .report-sheet td {
+    padding: 6px 8px;
+  }
+}

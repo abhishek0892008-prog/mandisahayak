@@ -16,7 +16,13 @@ const NAV_ITEMS = [
  * Previously each of the twelve screens carried its own copy of both, which is
  * why the language toggle and navigation drifted between them.
  */
-export function FarmerLayout({ title, subtitle, onBack, children, headerExtra }) {
+export function FarmerLayout({
+  title,
+  subtitle,
+  onBack,
+  children,
+  headerExtra,
+}) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
@@ -51,7 +57,9 @@ export function FarmerLayout({ title, subtitle, onBack, children, headerExtra })
             <LanguageToggle />
           </div>
 
-          {subtitle && <p className="mt-3 text-sm text-green-100">{subtitle}</p>}
+          {subtitle && (
+            <p className="mt-3 text-sm text-green-100">{subtitle}</p>
+          )}
 
           {headerExtra}
         </div>
