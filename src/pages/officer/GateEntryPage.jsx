@@ -41,7 +41,9 @@ function GateEntryPage() {
   );
 
   const locale = i18n.language;
-  const rows = Array.isArray(results.data) ? results.data : results.data ? [results.data] : [];
+  // The search endpoint answers { query, count, bookings }. Wrapping that
+  // object in an array made it look like a single booking row.
+  const rows = results.data?.bookings ?? [];
 
   const notFound = results.error instanceof ApiError && results.error.status === 404;
 

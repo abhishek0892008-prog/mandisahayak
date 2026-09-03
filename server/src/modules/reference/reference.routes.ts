@@ -13,15 +13,15 @@
  * centre relationship so the booking engine can resolve it later. It does NOT
  * compute slots, durations, availability or prices.
  */
-import { Router } from 'express';
-import { query } from '../../core/db.ts';
-import { asyncHandler, sendData } from '../../core/http.ts';
-import { badRequest, ErrorCodes } from '../../core/errors.ts';
-import { declareRoute, requirePermission } from '../../core/rbac.ts';
-import { consumeAll, RateLimits, toError } from '../../core/rateLimit.ts';
-import { bookingConstraints } from '../../domain/quantity.ts';
+import { Router } from "express";
+import { query } from "../../core/db.ts";
+import { asyncHandler, sendData } from "../../core/http.ts";
+import { badRequest, ErrorCodes } from "../../core/errors.ts";
+import { declareRoute, requirePermission } from "../../core/rbac.ts";
+import { consumeAll, RateLimits, toError } from "../../core/rateLimit.ts";
+import { bookingConstraints } from "../../domain/quantity.ts";
 
-const BASE = '/api/v1';
+const BASE = "/api/v1";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function buildReferenceRouter(): Router {
@@ -41,26 +41,33 @@ export function buildReferenceRouter(): Router {
   // crops, centres and booking constraints all still require a session.
   // Rate limited per IP because it is unauthenticated.
   declareRoute({
-    method: 'GET',
+    method: "GET",
     path: `${BASE}/reference/districts`,
     auth: {
-      kind: 'public',
+      kind: "public",
       reason:
-        'Registration is public and requires a districtId; districts are public government geography with no personal data.',
+        "Registration is public and requires a districtId; districts are public government geography with no personal data.",
     },
     csrf: false,
-    summary: 'Districts available for registration and centre selection.',
+    summary: "Districts available for registration and centre selection.",
   });
   router.get(
-    '/reference/districts',
+    "/reference/districts",
     asyncHandler(async (req, res) => {
       const limited = await consumeAll([
-        { rule: RateLimits.PUBLIC_REFERENCE_PER_IP, subject: req.clientIp ?? 'unknown' },
+        {
+          rule: RateLimits.PUBLIC_REFERENCE_PER_IP,
+          subject: req.clientIp ?? "unknown",
+        },
       ]);
       if (limited) throw toError(limited);
       const result = await query<{
-        id: string; name: string; lgd_code: string | null; data_type: string;
-        state_name: string; state_lgd_code: string;
+        id: string;
+        name: string;
+        lgd_code: string | null;
+        data_type: string;
+        state_name: string;
+        state_lgd_code: string;
       }>(
         `SELECT d.id, d.name, d.lgd_code, d.data_type,
                 s.name AS state_name, s.lgd_code AS state_lgd_code
@@ -82,27 +89,140 @@ export function buildReferenceRouter(): Router {
   );
 
   // -------------------------------------------------------------------------
-  // GET /reference/villages?districtId=
+  // GET /reference/registration-centres?districtId=
   // -------------------------------------------------------------------------
+  //
+  // PUBLIC, on the same reasoning as /reference/districts above and no further.
+  // `POST /auth/staff/register` is public and requires a centreId, so an
+  // applicant would otherwise need an account before they could apply for one.
+  //
+  // The projection is deliberately narrower than /reference/centres: id, name,
+  // code and district only. No lane counts, no accepted crops, no storage mode,
+  // no mandi or publisher attribution — those describe how a centre operates
+  // and stay behind `reference.read`. This answers exactly one question: "which
+  // centres may I name in an application?"
   declareRoute({
-    method: 'GET',
-    path: `${BASE}/reference/villages`,
-    auth: { kind: 'permission', permission: 'reference.read' },
+    method: "GET",
+    path: `${BASE}/reference/registration-centres`,
+    auth: {
+      kind: "public",
+      reason:
+        "Officer registration is public and requires a centreId. Exposes name and district only — operational detail stays behind reference.read.",
+    },
     csrf: false,
-    summary: 'Villages within a district. Currently empty — see the note below.',
+    summary: "Minimal active-centre list for the officer registration form.",
   });
   router.get(
-    '/reference/villages',
-    requirePermission('reference.read'),
+    "/reference/registration-centres",
     asyncHandler(async (req, res) => {
-      const districtId = String(req.query.districtId ?? '');
-      if (!UUID.test(districtId)) {
-        throw badRequest(ErrorCodes.VALIDATION_FAILED, 'districtId is required', {
-          districtId: 'DISTRICT_ID_INVALID',
+      const limited = await consumeAll([
+        {
+          rule: RateLimits.PUBLIC_REFERENCE_PER_IP,
+          subject: req.clientIp ?? "unknown",
+        },
+      ]);
+      if (limited) throw toError(limited);
+
+      const districtId = req.query.districtId
+        ? String(req.query.districtId)
+        : null;
+
+      if (districtId && !UUID.test(districtId)) {
+        throw badRequest(ErrorCodes.VALIDATION_FAILED, "districtId invalid", {
+          districtId: "DISTRICT_ID_INVALID",
         });
       }
 
-      const result = await query<{ id: string; name: string; lgd_code: string | null; data_type: string }>(
+      const result = await query<{
+        id: string;
+        code: string;
+        name: string;
+        district_id: string;
+        district_name: string;
+        crop_id: string | null;
+        crop_name: string | null;
+      }>(
+        `SELECT pc.id, pc.code, pc.name, d.id AS district_id, d.name AS district_name,
+                c.id AS crop_id, c.canonical_name AS crop_name
+           FROM procurement_centres pc
+           JOIN districts d ON d.id = pc.district_id
+           LEFT JOIN centre_crop_configurations ccc
+             ON ccc.centre_id = pc.id
+            AND ccc.is_active = true
+            AND ccc.effective_from <= CURRENT_DATE
+            AND (ccc.effective_to IS NULL OR ccc.effective_to >= CURRENT_DATE)
+           LEFT JOIN crops c ON c.id = ccc.crop_id
+          WHERE pc.status = 'ACTIVE'
+            AND ($1::uuid IS NULL OR pc.district_id = $1::uuid)
+          ORDER BY pc.name, c.canonical_name`,
+        [districtId],
+      );
+
+      sendData(
+        res,
+        200,
+        Object.values(
+          result.rows.reduce<
+            Record<
+              string,
+              {
+                id: string;
+                code: string;
+                name: string;
+                district: { id: string; name: string };
+                acceptedCrops: { id: string; name: string }[];
+              }
+            >
+          >((centres, r) => {
+            const centre = (centres[r.id] ??= {
+              id: r.id,
+              code: r.code,
+              name: r.name,
+              district: { id: r.district_id, name: r.district_name },
+              acceptedCrops: [],
+            });
+            if (r.crop_id && r.crop_name) {
+              centre.acceptedCrops.push({ id: r.crop_id, name: r.crop_name });
+            }
+            return centres;
+          }, {}),
+        ),
+      );
+    }),
+  );
+
+  // -------------------------------------------------------------------------
+  // GET /reference/villages?districtId=
+  // -------------------------------------------------------------------------
+  declareRoute({
+    method: "GET",
+    path: `${BASE}/reference/villages`,
+    auth: { kind: "permission", permission: "reference.read" },
+    csrf: false,
+    summary:
+      "Villages within a district. Currently empty — see the note below.",
+  });
+  router.get(
+    "/reference/villages",
+    requirePermission("reference.read"),
+    asyncHandler(async (req, res) => {
+      const districtId = String(req.query.districtId ?? "");
+      if (!UUID.test(districtId)) {
+        throw badRequest(
+          ErrorCodes.VALIDATION_FAILED,
+          "districtId is required",
+          {
+            districtId: "DISTRICT_ID_INVALID",
+          },
+        );
+      }
+
+      const result = await query<{
+        id: string;
+        name: string;
+        lgd_code: string | null;
+        data_type: string;
+      }>(
         `SELECT id, name, lgd_code, data_type FROM villages WHERE district_id = $1 ORDER BY name`,
         [districtId],
       );
@@ -117,9 +237,13 @@ export function buildReferenceRouter(): Router {
       sendData(res, 200, {
         districtId,
         available: result.rowCount! > 0,
-        reasonCode: result.rowCount! > 0 ? null : 'NO_VILLAGE_DATA_FOR_DISTRICT',
+        reasonCode:
+          result.rowCount! > 0 ? null : "NO_VILLAGE_DATA_FOR_DISTRICT",
         villages: result.rows.map((r) => ({
-          id: r.id, name: r.name, lgdCode: r.lgd_code, dataType: r.data_type,
+          id: r.id,
+          name: r.name,
+          lgdCode: r.lgd_code,
+          dataType: r.data_type,
         })),
       });
     }),
@@ -132,20 +256,26 @@ export function buildReferenceRouter(): Router {
   // Crop definitions are never duplicated or hardcoded in a controller.
   // -------------------------------------------------------------------------
   declareRoute({
-    method: 'GET',
+    method: "GET",
     path: `${BASE}/reference/crops`,
-    auth: { kind: 'permission', permission: 'reference.read' },
+    auth: { kind: "permission", permission: "reference.read" },
     csrf: false,
-    summary: 'Crops with their official season and marketing year.',
+    summary: "Crops with their official season and marketing year.",
   });
   router.get(
-    '/reference/crops',
-    requirePermission('reference.read'),
+    "/reference/crops",
+    requirePermission("reference.read"),
     asyncHandler(async (_req, res) => {
       const result = await query<{
-        id: string; code: string; canonical_name: string; data_type: string;
-        season_code: string | null; season_name: string | null;
-        marketing_year: string | null; grades: string[] | null; centre_count: number;
+        id: string;
+        code: string;
+        canonical_name: string;
+        data_type: string;
+        season_code: string | null;
+        season_name: string | null;
+        marketing_year: string | null;
+        grades: string[] | null;
+        centre_count: number;
       }>(
         `SELECT c.id, c.code, c.canonical_name, c.data_type,
                 s.code AS season_code, s.name AS season_name,
@@ -173,7 +303,9 @@ export function buildReferenceRouter(): Router {
           // bundle: renaming an official crop misrepresents the source.
           canonicalName: r.canonical_name,
           dataType: r.data_type,
-          season: r.season_code ? { code: r.season_code, name: r.season_name } : null,
+          season: r.season_code
+            ? { code: r.season_code, name: r.season_name }
+            : null,
           marketingYear: r.marketing_year,
           // Present when the source publishes per-variety rates (e.g. Paddy
           // Common / Grade A). A grade-less lookup for such a crop is ambiguous
@@ -189,34 +321,49 @@ export function buildReferenceRouter(): Router {
   // GET /reference/centres?districtId=&cropId=
   // -------------------------------------------------------------------------
   declareRoute({
-    method: 'GET',
+    method: "GET",
     path: `${BASE}/reference/centres`,
-    auth: { kind: 'permission', permission: 'reference.read' },
+    auth: { kind: "permission", permission: "reference.read" },
     csrf: false,
-    summary: 'Active procurement centres, optionally filtered by district and crop.',
+    summary:
+      "Active procurement centres, optionally filtered by district and crop.",
   });
   router.get(
-    '/reference/centres',
-    requirePermission('reference.read'),
+    "/reference/centres",
+    requirePermission("reference.read"),
     asyncHandler(async (req, res) => {
-      const districtId = req.query.districtId ? String(req.query.districtId) : null;
+      const districtId = req.query.districtId
+        ? String(req.query.districtId)
+        : null;
       const cropId = req.query.cropId ? String(req.query.cropId) : null;
 
       if (districtId && !UUID.test(districtId)) {
-        throw badRequest(ErrorCodes.VALIDATION_FAILED, 'districtId invalid', {
-          districtId: 'DISTRICT_ID_INVALID',
+        throw badRequest(ErrorCodes.VALIDATION_FAILED, "districtId invalid", {
+          districtId: "DISTRICT_ID_INVALID",
         });
       }
       if (cropId && !UUID.test(cropId)) {
-        throw badRequest(ErrorCodes.VALIDATION_FAILED, 'cropId invalid', { cropId: 'CROP_ID_INVALID' });
+        throw badRequest(ErrorCodes.VALIDATION_FAILED, "cropId invalid", {
+          cropId: "CROP_ID_INVALID",
+        });
       }
 
       const result = await query<{
-        id: string; code: string; name: string; data_type: string; timezone: string;
-        storage_check_mode: string; district_name: string; district_id: string;
-        lane_count: number; crops: string[] | null;
-        mandi_name: string | null; mandi_grade: string | null; mandi_data_type: string | null;
-        mandi_publisher: string | null; mandi_source_url: string | null;
+        id: string;
+        code: string;
+        name: string;
+        data_type: string;
+        timezone: string;
+        storage_check_mode: string;
+        district_name: string;
+        district_id: string;
+        lane_count: number;
+        crops: string[] | null;
+        mandi_name: string | null;
+        mandi_grade: string | null;
+        mandi_data_type: string | null;
+        mandi_publisher: string | null;
+        mandi_source_url: string | null;
       }>(
         `SELECT pc.id, pc.code, pc.name, pc.data_type, pc.timezone, pc.storage_check_mode,
                 d.name AS district_name, d.id AS district_id,
@@ -278,8 +425,8 @@ export function buildReferenceRouter(): Router {
            */
           storage: {
             checkMode: r.storage_check_mode,
-            status: 'NOT_AVAILABLE',
-            reasonCode: 'NO_CAPACITY_DATA_FOR_CENTRE',
+            status: "NOT_AVAILABLE",
+            reasonCode: "NO_CAPACITY_DATA_FOR_CENTRE",
           },
         })),
       );
@@ -290,15 +437,15 @@ export function buildReferenceRouter(): Router {
   // GET /reference/booking-constraints
   // -------------------------------------------------------------------------
   declareRoute({
-    method: 'GET',
+    method: "GET",
     path: `${BASE}/reference/booking-constraints`,
-    auth: { kind: 'permission', permission: 'reference.read' },
+    auth: { kind: "permission", permission: "reference.read" },
     csrf: false,
-    summary: 'Quantity rules, so the UI never hardcodes the range.',
+    summary: "Quantity rules, so the UI never hardcodes the range.",
   });
   router.get(
-    '/reference/booking-constraints',
-    requirePermission('reference.read'),
+    "/reference/booking-constraints",
+    requirePermission("reference.read"),
     asyncHandler(async (_req, res) => {
       sendData(res, 200, bookingConstraints());
     }),

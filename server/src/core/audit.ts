@@ -57,6 +57,9 @@ export const AuditActions = {
   OFFICER_CREATED: 'officer.created',
   OFFICER_DEACTIVATED: 'officer.deactivated',
   OFFICER_REACTIVATED: 'officer.reactivated',
+  OFFICER_REGISTRATION_REQUESTED: 'officer.registration_requested',
+  OFFICER_REGISTRATION_APPROVED: 'officer.registration_approved',
+  OFFICER_REGISTRATION_REJECTED: 'officer.registration_rejected',
 } as const;
 
 export type AuditAction = (typeof AuditActions)[keyof typeof AuditActions];

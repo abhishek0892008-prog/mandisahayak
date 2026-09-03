@@ -64,7 +64,7 @@ function WeighmentPage() {
     { enabled: Boolean(centre.centreId) },
   );
 
-  const rows = bookings.data ?? [];
+  const rows = bookings.data?.bookings ?? [];
   const active = rows.find((row) => row.bookingCode === selected) ?? rows[0] ?? null;
   const locale = i18n.language;
   const stage = active ? STAGE[active.status] : null;

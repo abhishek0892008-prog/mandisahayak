@@ -69,7 +69,9 @@ export class NetworkError extends Error {
 
 function readCookie(name) {
   const prefix = `${name}=`;
-  const hit = document.cookie.split("; ").find((entry) => entry.startsWith(prefix));
+  const hit = document.cookie
+    .split("; ")
+    .find((entry) => entry.startsWith(prefix));
 
   return hit ? decodeURIComponent(hit.slice(prefix.length)) : null;
 }
@@ -83,10 +85,12 @@ let csrfPriming = null;
 
 export function primeCsrf() {
   if (!csrfPriming) {
-    csrfPriming = request("GET", "/auth/csrf", { csrf: false }).catch((error) => {
-      csrfPriming = null;
-      throw error;
-    });
+    csrfPriming = request("GET", "/auth/csrf", { csrf: false }).catch(
+      (error) => {
+        csrfPriming = null;
+        throw error;
+      },
+    );
   }
 
   return csrfPriming;
@@ -149,7 +153,11 @@ async function request(method, path, options = {}) {
   }
 
   if (!response.ok) {
-    throw new ApiError(response.status, payload, response.headers.get("x-request-id"));
+    throw new ApiError(
+      response.status,
+      payload,
+      response.headers.get("x-request-id"),
+    );
   }
 
   return payload?.data ?? payload ?? null;
@@ -176,18 +184,26 @@ async function write(method, path, options = {}) {
 
 /** One admin read under a centre. */
 function adminCentreRead(centreId, resource, query, signal) {
-  return request("GET", `/admin/centres/${encodeURIComponent(centreId)}/${resource}`, {
-    query,
-    signal,
-  });
+  return request(
+    "GET",
+    `/admin/centres/${encodeURIComponent(centreId)}/${resource}`,
+    {
+      query,
+      signal,
+    },
+  );
 }
 
 /** One officer lifecycle transition. All share a shape, so they share a helper. */
 function officerAction(bookingCode, action, body, signal) {
-  return write("POST", `/officer/bookings/${encodeURIComponent(bookingCode)}/${action}`, {
-    body: body ?? {},
-    signal,
-  });
+  return write(
+    "POST",
+    `/officer/bookings/${encodeURIComponent(bookingCode)}/${action}`,
+    {
+      body: body ?? {},
+      signal,
+    },
+  );
 }
 
 /** Idempotency-Key is required on POST /bookings (bookings.md §5). */
@@ -228,12 +244,24 @@ export const api = {
   villages: (districtId, signal) =>
     request("GET", "/reference/villages", { query: { districtId }, signal }),
 
+  /**
+   * Active centres, name and district only, for the public officer
+   * registration form. Deliberately narrower than `centres` below, which needs
+   * a session because it exposes how a centre operates.
+   */
+  registrationCentres: (districtId, signal) =>
+    request("GET", "/reference/registration-centres", {
+      query: { districtId },
+      signal,
+    }),
+
   crops: (signal) => request("GET", "/reference/crops", { signal }),
 
   centres: (filters = {}, signal) =>
     request("GET", "/reference/centres", { query: filters, signal }),
 
-  bookingConstraints: (signal) => request("GET", "/reference/booking-constraints", { signal }),
+  bookingConstraints: (signal) =>
+    request("GET", "/reference/booking-constraints", { signal }),
 
   // -- bookings ------------------------------------------------------------
   availability: (payload, signal) =>
@@ -263,41 +291,62 @@ export const api = {
 
   // -- queue, procurement, payment -----------------------------------------
   queue: (bookingCode, signal) =>
-    request("GET", `/bookings/${encodeURIComponent(bookingCode)}/queue`, { signal }),
+    request("GET", `/bookings/${encodeURIComponent(bookingCode)}/queue`, {
+      signal,
+    }),
 
   procurement: (bookingCode, signal) =>
-    request("GET", `/bookings/${encodeURIComponent(bookingCode)}/procurement`, { signal }),
+    request("GET", `/bookings/${encodeURIComponent(bookingCode)}/procurement`, {
+      signal,
+    }),
 
   payment: (bookingCode, signal) =>
-    request("GET", `/bookings/${encodeURIComponent(bookingCode)}/payment`, { signal }),
+    request("GET", `/bookings/${encodeURIComponent(bookingCode)}/payment`, {
+      signal,
+    }),
 
   // -- notifications -------------------------------------------------------
   notifications: (options = {}, signal) =>
     request("GET", "/notifications", { query: options, signal }),
 
-  unreadCount: (signal) => request("GET", "/notifications/unread-count", { signal }),
+  unreadCount: (signal) =>
+    request("GET", "/notifications/unread-count", { signal }),
 
   markNotificationRead: (id, signal) =>
     write("POST", `/notifications/${encodeURIComponent(id)}/read`, { signal }),
 
-  markAllNotificationsRead: (signal) => write("POST", "/notifications/read-all", { signal }),
+  markAllNotificationsRead: (signal) =>
+    write("POST", "/notifications/read-all", { signal }),
 
   // -- staff (officer / admin) ---------------------------------------------
   //
-  // Password alone creates NO session. It returns an OTP challenge, which is
-  // then verified through the same POST /auth/otp/verify a farmer uses
-  // (authentication.md §2.3).
-  staffLogin: (username, password, signal) =>
-    write("POST", "/auth/staff/login", { body: { username, password }, signal }),
+  // Officer login uses the same mobile OTP flow as farmer login.
+  staffLogin: (phone, signal) =>
+    write("POST", "/auth/staff/login", {
+      body: { phone: `+91${phone}` },
+      signal,
+    }),
+
+  /**
+   * Applies for an officer account. This creates a REVIEW REQUEST, not an
+   * account and not a session — the response is `{ status: "PENDING" }` and
+   * the applicant cannot sign in until an administrator approves it.
+   */
+  staffRegister: (payload, signal) =>
+    write("POST", "/auth/staff/register", { body: payload, signal }),
 
   officerCentres: (signal) => request("GET", "/officer/centres", { signal }),
 
   /** `date` defaults to today in the CENTRE's timezone, never the browser's. */
   centreBookings: (centreId, { date, status } = {}, signal) =>
-    request("GET", `/officer/centres/${encodeURIComponent(centreId)}/bookings`, {
-      query: { date, status },
-      signal,
-    }),
+    request(
+      "GET",
+      `/officer/centres/${encodeURIComponent(centreId)}/bookings`,
+      {
+        query: { date, status },
+        signal,
+      },
+    ),
 
   centreQueue: (centreId, { date } = {}, signal) =>
     request("GET", `/officer/centres/${encodeURIComponent(centreId)}/queue`, {
@@ -309,7 +358,9 @@ export const api = {
     request("GET", "/officer/bookings/search", { query: { q: query }, signal }),
 
   officerBooking: (bookingCode, signal) =>
-    request("GET", `/officer/bookings/${encodeURIComponent(bookingCode)}`, { signal }),
+    request("GET", `/officer/bookings/${encodeURIComponent(bookingCode)}`, {
+      signal,
+    }),
 
   /**
    * Lifecycle transitions.
@@ -319,9 +370,11 @@ export const api = {
    * answer to a double tap rather than a failure to handle one
    * (officer.md §1).
    */
-  officerArrive: (bookingCode, signal) => officerAction(bookingCode, "arrive", undefined, signal),
+  officerArrive: (bookingCode, signal) =>
+    officerAction(bookingCode, "arrive", undefined, signal),
 
-  officerNoShow: (bookingCode, signal) => officerAction(bookingCode, "no-show", undefined, signal),
+  officerNoShow: (bookingCode, signal) =>
+    officerAction(bookingCode, "no-show", undefined, signal),
 
   officerStartWeighing: (bookingCode, signal) =>
     officerAction(bookingCode, "weighing", undefined, signal),
@@ -362,18 +415,28 @@ export const api = {
     write("POST", "/admin/centres", { body: centre, signal }),
 
   adminUpdateCentre: (centreId, patch, signal) =>
-    write("PATCH", `/admin/centres/${encodeURIComponent(centreId)}`, { body: patch, signal }),
+    write("PATCH", `/admin/centres/${encodeURIComponent(centreId)}`, {
+      body: patch,
+      signal,
+    }),
 
-  adminCentreLanes: (centreId, signal) => adminCentreRead(centreId, "lanes", undefined, signal),
+  adminCentreLanes: (centreId, signal) =>
+    adminCentreRead(centreId, "lanes", undefined, signal),
 
   adminSetLane: (centreId, lane, signal) =>
-    write("PUT", `/admin/centres/${encodeURIComponent(centreId)}/lanes`, { body: lane, signal }),
+    write("PUT", `/admin/centres/${encodeURIComponent(centreId)}/lanes`, {
+      body: lane,
+      signal,
+    }),
 
   adminCentreHours: (centreId, date, signal) =>
     adminCentreRead(centreId, "hours", date ? { date } : undefined, signal),
 
   adminSetHours: (centreId, hours, signal) =>
-    write("PUT", `/admin/centres/${encodeURIComponent(centreId)}/hours`, { body: hours, signal }),
+    write("PUT", `/admin/centres/${encodeURIComponent(centreId)}/hours`, {
+      body: hours,
+      signal,
+    }),
 
   adminCentreHolidays: (centreId, signal) =>
     adminCentreRead(centreId, "holidays", undefined, signal),
@@ -391,13 +454,22 @@ export const api = {
       { signal },
     ),
 
-  adminCentreCrops: (centreId, signal) => adminCentreRead(centreId, "crops", undefined, signal),
+  adminCentreCrops: (centreId, signal) =>
+    adminCentreRead(centreId, "crops", undefined, signal),
 
   adminSetCentreCrop: (centreId, crop, signal) =>
-    write("PUT", `/admin/centres/${encodeURIComponent(centreId)}/crops`, { body: crop, signal }),
+    write("PUT", `/admin/centres/${encodeURIComponent(centreId)}/crops`, {
+      body: crop,
+      signal,
+    }),
 
   adminSlotConfig: (centreId, date, signal) =>
-    adminCentreRead(centreId, "slot-config", date ? { date } : undefined, signal),
+    adminCentreRead(
+      centreId,
+      "slot-config",
+      date ? { date } : undefined,
+      signal,
+    ),
 
   adminSetSlotConfig: (centreId, config, signal) =>
     write("PUT", `/admin/centres/${encodeURIComponent(centreId)}/slot-config`, {
@@ -428,19 +500,29 @@ export const api = {
     }),
 
   adminOfficer: (employeeCode, signal) =>
-    request("GET", `/admin/officers/${encodeURIComponent(employeeCode)}`, { signal }),
+    request("GET", `/admin/officers/${encodeURIComponent(employeeCode)}`, {
+      signal,
+    }),
 
   adminCreateOfficer: (officer, signal) =>
     write("POST", "/admin/officers", { body: officer, signal }),
 
   adminDeactivateOfficer: (employeeCode, reason, signal) =>
-    write("POST", `/admin/officers/${encodeURIComponent(employeeCode)}/deactivate`, {
-      body: reason ? { reason } : {},
-      signal,
-    }),
+    write(
+      "POST",
+      `/admin/officers/${encodeURIComponent(employeeCode)}/deactivate`,
+      {
+        body: reason ? { reason } : {},
+        signal,
+      },
+    ),
 
   adminReactivateOfficer: (employeeCode, signal) =>
-    write("POST", `/admin/officers/${encodeURIComponent(employeeCode)}/reactivate`, { signal }),
+    write(
+      "POST",
+      `/admin/officers/${encodeURIComponent(employeeCode)}/reactivate`,
+      { signal },
+    ),
 
   /** Phone numbers are masked to the last two digits by the server. */
   adminFarmers: (signal) => request("GET", "/admin/farmers", { signal }),
@@ -450,7 +532,8 @@ export const api = {
     request("GET", "/admin/audit-logs", { query: { limit }, signal }),
 
   // -- notifications -------------------------------------------------------
-  notificationPreferences: (signal) => request("GET", "/notifications/preferences", { signal }),
+  notificationPreferences: (signal) =>
+    request("GET", "/notifications/preferences", { signal }),
 
   /**
    * Sets ONE preference. `event: null` means the whole channel.

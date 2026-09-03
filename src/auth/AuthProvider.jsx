@@ -2,9 +2,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import api, { ApiError, primeCsrf } from "../lib/api";
+import { isSupportedLanguage, SERVER_LOCALES } from "../lib/languages";
 import { AuthContext } from "./context";
 
-const LANGUAGE_KEY = "fq.language";
+/**
+ * Must match the key `src/i18n.js` reads at startup. They were previously
+ * different ("fq.language" here, "farmqueueLanguage" there), so a chosen
+ * language was written to one key and looked for under another — and the
+ * preference silently failed to survive a reload.
+ */
+const LANGUAGE_KEY = "farmqueueLanguage";
 
 /**
  * The only sanctioned use of localStorage in this application: a language
@@ -96,12 +103,15 @@ export function AuthProvider({ children }) {
    */
   const changeLanguage = useCallback(
     async (language) => {
-      if (language !== "en" && language !== "hi") return;
+      if (!isSupportedLanguage(language)) return;
 
       i18n.changeLanguage(language);
       storeLanguage(language);
 
-      if (status === "authenticated") {
+      // Only `en` and `hi` exist in the server's LocaleSchema, so those are the
+      // only ones worth mirroring. The rest are a client display preference —
+      // sending one would be a guaranteed 400 for no gain.
+      if (status === "authenticated" && SERVER_LOCALES.includes(language)) {
         try {
           await api.updateMe({ locale: language });
           setFarmer((current) => (current ? { ...current, locale: language } : current));

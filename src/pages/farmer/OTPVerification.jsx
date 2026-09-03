@@ -50,11 +50,10 @@ function OTPVerification() {
   const isStaff = initial?.purpose === "staff";
 
   const maskedPhone = useMemo(() => {
-    if (isStaff) return initial?.username ?? "";
     if (!phone) return "+91 XXXXX XXXXX";
 
     return `+91 ${phone.slice(0, 2)}XXXXXX${phone.slice(-2)}`;
-  }, [phone, isStaff, initial?.username]);
+  }, [phone]);
 
   const demoOtp = useApiResource(
     (signal) => api.devLastOtp(phone, signal),
@@ -117,9 +116,7 @@ function OTPVerification() {
     setError(null);
     setLocalError(null);
 
-    inputRefs.current[
-      Math.min(pasted.length, OTP_LENGTH - 1)
-    ]?.focus();
+    inputRefs.current[Math.min(pasted.length, OTP_LENGTH - 1)]?.focus();
   }
 
   async function handleVerify() {
@@ -172,8 +169,7 @@ function OTPVerification() {
   }
 
   const expired = expiresIn <= 0;
-  const shownError =
-    localError ?? (error ? translateError(t, error) : null);
+  const shownError = localError ?? (error ? translateError(t, error) : null);
 
   return (
     <div className="min-h-screen bg-[#f3f5f3] text-slate-900">
@@ -181,7 +177,7 @@ function OTPVerification() {
         <div className="mx-auto flex min-h-[72px] w-full max-w-[1280px] items-center justify-between px-4 sm:px-6 lg:px-8">
           <button
             type="button"
-            onClick={() => navigate("/")}
+            onClick={() => navigate("/portal")}
             className="flex items-center gap-3 text-left"
           >
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 text-xl">
@@ -266,15 +262,9 @@ function OTPVerification() {
                   inputMode="numeric"
                   disabled={submitting || expired}
                   aria-label={`${t("otpDigit")} ${index + 1}`}
-                  autoComplete={
-                    index === 0 ? "one-time-code" : "off"
-                  }
-                  onChange={(event) =>
-                    setDigit(index, event.target.value)
-                  }
-                  onKeyDown={(event) =>
-                    handleKeyDown(event, index)
-                  }
+                  autoComplete={index === 0 ? "one-time-code" : "off"}
+                  onChange={(event) => setDigit(index, event.target.value)}
+                  onKeyDown={(event) => handleKeyDown(event, index)}
                   className={`h-12 w-11 rounded-xl border bg-white text-center text-lg font-extrabold outline-none transition sm:h-14 sm:w-14 ${
                     shownError
                       ? "border-red-300 focus:border-red-500 focus:ring-4 focus:ring-red-50"
@@ -342,9 +332,7 @@ function OTPVerification() {
             )}
 
             <div className="mt-7 text-center">
-              <p className="text-sm text-slate-500">
-                {t("didntReceiveOtp")}
-              </p>
+              <p className="text-sm text-slate-500">{t("didntReceiveOtp")}</p>
 
               {resendIn > 0 ? (
                 <p className="mt-1 text-sm font-extrabold text-slate-400">
@@ -359,9 +347,7 @@ function OTPVerification() {
                   disabled={resending}
                   className="mt-1 text-sm font-extrabold text-emerald-700 hover:underline disabled:text-slate-400"
                 >
-                  {resending
-                    ? t("sendingOtp")
-                    : t("resendOtp")}
+                  {resending ? t("sendingOtp") : t("resendOtp")}
                 </button>
               )}
             </div>
@@ -372,9 +358,7 @@ function OTPVerification() {
               disabled={submitting || expired}
               className="mt-6 flex min-h-14 w-full items-center justify-center rounded-xl bg-[#0b7f43] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-[#096b39] active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-emerald-300"
             >
-              {submitting
-                ? t("verifying")
-                : `${t("verifyAndContinue")} →`}
+              {submitting ? t("verifying") : `${t("verifyAndContinue")} →`}
             </button>
 
             <button

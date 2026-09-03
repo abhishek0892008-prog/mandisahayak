@@ -129,6 +129,46 @@ export function buildOfficerRouter(): Router {
   );
 
   // -------------------------------------------------------------------------
+  // GET /officer/centres/:centreId/overview
+  // -------------------------------------------------------------------------
+  //
+  // Everything the centre dashboard shows that is not a booking: the shift
+  // hours for the day, the lane and slot configuration capacity comes from,
+  // the crops this centre procures with their ACTIVE support price, and the
+  // storage position.
+  //
+  // Storage is reported as NOT_AVAILABLE with a reason code rather than a
+  // number. `storage_capacity` is empty by design (D-10 / 0006_storage.sql:
+  // "No capacity figure is seeded by any migration"), and a dashboard that
+  // printed 0 kg or invented a ceiling would be stating a fact nobody
+  // published.
+  declareRoute({
+    method: 'GET',
+    path: `${BASE}/officer/centres/:centreId/overview`,
+    auth: { kind: 'permission', permission: 'booking.read.centre' },
+    csrf: false,
+    summary: 'Shift hours, lane/slot capacity, accepted crops with MSP, and storage position.',
+  });
+  router.get(
+    '/officer/centres/:centreId/overview',
+    requirePermission('booking.read.centre'),
+    asyncHandler(async (req, res) => {
+      const centreId = parse(z.string().uuid('CENTRE_ID_INVALID'), req.params.centreId);
+
+      if (!actorMayActOnCentre(req.actor!, centreId)) throw notFound('Centre not found');
+
+      const timezone = await repo.centreTimezone(centreId);
+      if (!timezone) throw notFound('Centre not found');
+
+      const date = req.query.date
+        ? parse(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'DATE_INVALID'), req.query.date)
+        : localDateOf(new Date(), timezone);
+
+      sendData(res, 200, await centreOverview(centreId, date, timezone));
+    }),
+  );
+
+  // -------------------------------------------------------------------------
   // GET /officer/bookings/search
   //
   // Declared BEFORE /officer/bookings/:bookingCode so "search" is never parsed

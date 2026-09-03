@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import AuthProvider from "./auth/AuthProvider";
 import { OFFICER } from "./auth/roles";
@@ -19,12 +19,15 @@ import Notifications from "./pages/farmer/Notifications";
 import Profile from "./pages/farmer/Profile";
 
 import OfficerLogin from "./pages/officer/OfficerLogin";
+import OfficerRegistration from "./pages/officer/OfficerRegistration";
 import OfficerToday from "./pages/officer/OfficerToday";
 import GateEntryPage from "./pages/officer/GateEntryPage";
 import WeighmentPage from "./pages/officer/WeighmentPage";
 import OfficerPayments from "./pages/officer/PaymentsPage";
 import OfficerReports from "./pages/officer/ReportsPage";
 
+import LanguageSelect from "./pages/LanguageSelect";
+import PortalSelect from "./pages/PortalSelect";
 import NotFound from "./pages/NotFound";
 
 /**
@@ -45,10 +48,19 @@ function App() {
       <BrowserRouter>
         <AuthProvider>
           <Routes>
+            {/*
+              Entry flow, in order: choose a language, choose a portal, then the
+              sign-in screen for that portal. Registration moved off "/" to
+              "/register" so the language choice is genuinely first — a farmer
+              who cannot read the interface cannot fill in a form in it.
+            */}
             <Route element={<PublicOnlyRoute />}>
-              <Route path="/" element={<Registration />} />
+              <Route path="/" element={<LanguageSelect />} />
+              <Route path="/portal" element={<PortalSelect />} />
+              <Route path="/register" element={<Registration />} />
               <Route path="/login" element={<Login />} />
               <Route path="/staff-login" element={<OfficerLogin />} />
+              <Route path="/staff-register" element={<OfficerRegistration />} />
               <Route path="/verify-otp" element={<OTPVerification />} />
             </Route>
 
@@ -74,7 +86,6 @@ function App() {
               <Route path="/officer/reports" element={<OfficerReports />} />
             </Route>
 
-            <Route path="/register" element={<Navigate to="/" replace />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>

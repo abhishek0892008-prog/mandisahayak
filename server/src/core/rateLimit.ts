@@ -28,6 +28,11 @@ export const RateLimits = {
   REGISTER_PER_IP: { name: 'register_ip', limit: 10, windowSeconds: 60 * 60 },
   STAFF_LOGIN_PER_USERNAME: { name: 'staff_login_user', limit: 5, windowSeconds: 15 * 60 },
   STAFF_LOGIN_PER_IP: { name: 'staff_login_ip', limit: 30, windowSeconds: 60 * 60 },
+  // Officer registration is a public write, so it stays limited — flooding it
+  // from one source is the realistic abuse. An hour window rather than a day
+  // keeps a shared NAT or a demo from locking everyone out until tomorrow,
+  // which a 24h window did in practice.
+  STAFF_REGISTER_PER_IP: { name: 'staff_register_ip', limit: 20, windowSeconds: 60 * 60 },
   SESSION_PER_IP: { name: 'session_ip', limit: 60, windowSeconds: 15 * 60 },
   BOOKING_CREATE_PER_FARMER: { name: 'booking_create_farmer', limit: 10, windowSeconds: 60 * 60 },
   AVAILABILITY_PER_SESSION: { name: 'availability_session', limit: 120, windowSeconds: 15 * 60 },

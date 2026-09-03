@@ -48,7 +48,7 @@ function ReportsPage() {
     { enabled: Boolean(centre.centreId) },
   );
 
-  const rows = bookings.data ?? [];
+  const rows = bookings.data?.bookings ?? [];
   const locale = i18n.language;
 
   const completed = rows.filter((row) =>

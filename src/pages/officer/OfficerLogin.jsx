@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import api from "../../lib/api";
 import { translateFieldErrors } from "../../lib/codes";
+import LanguageToggle from "../../components/LanguageToggle";
 import { ErrorState } from "../../components/StateViews";
 
 /**
@@ -22,39 +23,35 @@ function OfficerLogin() {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [fieldErrors, setFieldErrors] = useState({});
+  const [phone, setPhone] = useState("");
+  const [fieldError, setFieldError] = useState(null);
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(event) {
     event.preventDefault();
 
-    if (!username.trim() || !password) {
-      setFieldErrors({
-        username: username.trim() ? undefined : t("codes.fieldErrors.USERNAME_INVALID"),
-        password: password ? undefined : t("codes.fieldErrors.PASSWORD_REQUIRED"),
-      });
+    if (!/^[6-9]\d{9}$/.test(phone)) {
+      setFieldError(t("codes.fieldErrors.PHONE_INVALID_INDIAN_MOBILE"));
       return;
     }
 
     setSubmitting(true);
     setError(null);
-    setFieldErrors({});
+    setFieldError(null);
 
     try {
-      const challenge = await api.staffLogin(username.trim(), password);
+      const challenge = await api.staffLogin(phone);
 
       navigate("/verify-otp", {
         replace: true,
-        state: { challenge, purpose: "staff", username: username.trim() },
+        state: { challenge, purpose: "staff", phone },
       });
     } catch (loginError) {
       const fields = translateFieldErrors(t, loginError);
 
-      if (Object.keys(fields).length > 0) {
-        setFieldErrors(fields);
+      if (fields.phone) {
+        setFieldError(fields.phone);
       } else {
         setError(loginError);
       }
@@ -63,97 +60,146 @@ function OfficerLogin() {
     }
   }
 
-  const control =
-    "w-full rounded-lg border border-gray-200 bg-gray-50 p-3 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100";
-
   return (
-    <div className="flex min-h-screen items-center justify-center bg-emerald-50 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-lg">
-        <div className="mb-3 flex justify-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-700 text-2xl shadow-sm">
-            🏛️
-          </div>
-        </div>
-
-        <h1 className="text-center text-2xl font-bold text-emerald-800">{t("appName")}</h1>
-
-        <p className="mt-1 text-center text-gray-500">{t("staffPortal")}</p>
-
-        <div className="mt-8">
-          <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
-            {t("staffLogin")}
-          </p>
-
-          <h2 className="mt-3 text-xl font-semibold text-gray-900">{t("welcomeBack")}</h2>
-
-          <p className="mb-6 mt-1 text-sm text-gray-500">{t("staffLoginDescription")}</p>
-        </div>
-
-        {error && <ErrorState error={error} className="mb-4" onRetry={() => setError(null)} />}
-
-        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-          <div>
-            <label htmlFor="username" className="mb-1 block text-sm font-medium text-gray-700">
-              {t("employeeCode")}
-            </label>
-
-            <input
-              id="username"
-              type="text"
-              value={username}
-              autoComplete="username"
-              onChange={(event) => setUsername(event.target.value)}
-              className={control}
-            />
-
-            {fieldErrors.username && (
-              <p className="mt-1 text-xs text-red-500">{fieldErrors.username}</p>
-            )}
-          </div>
-
-          <div>
-            <label htmlFor="password" className="mb-1 block text-sm font-medium text-gray-700">
-              {t("password")}
-            </label>
-
-            <input
-              id="password"
-              type="password"
-              value={password}
-              autoComplete="current-password"
-              onChange={(event) => setPassword(event.target.value)}
-              className={control}
-            />
-
-            {fieldErrors.password && (
-              <p className="mt-1 text-xs text-red-500">{fieldErrors.password}</p>
-            )}
-          </div>
-
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full rounded-lg bg-emerald-700 py-3 font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-emerald-300"
-          >
-            {submitting ? t("verifying") : `${t("continueToOtp")} →`}
-          </button>
-
-          {/* Said plainly, because a password box that silently needs a second
-              step is a support call waiting to happen. */}
-          <p className="text-center text-xs text-gray-400">{t("staffTwoFactorNote")}</p>
-        </form>
-
-        <p className="mt-6 text-center text-sm text-gray-500">
-          {t("areYouFarmer")}{" "}
+    <div className="min-h-screen bg-[#f3f5f3] text-slate-900">
+      <header className="bg-[#11a255] text-white">
+        <div className="mx-auto flex min-h-[72px] w-full max-w-[1280px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
           <button
             type="button"
-            onClick={() => navigate("/login")}
-            className="font-semibold text-emerald-700 hover:underline"
+            onClick={() => navigate("/portal")}
+            className="flex items-center gap-3 text-left"
           >
-            {t("farmerLogin")}
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 text-xl">
+              🏛️
+            </span>
+
+            <span>
+              <span className="block text-lg font-extrabold tracking-tight">
+                FarmQueue
+              </span>
+
+              <span className="hidden text-xs font-medium text-white/80 sm:block">
+                {t("staffPortal")}
+              </span>
+            </span>
           </button>
-        </p>
-      </div>
+
+          <div className="flex items-center gap-2 sm:gap-3">
+            <LanguageToggle />
+
+            <button
+              type="button"
+              onClick={() => navigate("/login")}
+              className="rounded-full border border-white/30 bg-white px-4 py-2 text-sm font-bold text-[#0b7f43] transition hover:bg-white/90"
+            >
+              {t("farmerLogin")}
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-[1280px] items-center justify-center px-4 py-8 sm:px-6 lg:px-8">
+        <section className="w-full max-w-[500px]">
+          <div className="rounded-[24px] border border-slate-200 bg-white px-5 py-7 shadow-[0_8px_30px_rgba(16,64,42,0.06)] sm:px-8 sm:py-9 lg:px-10 lg:py-10">
+            <div className="text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-2xl">
+                🏛️
+              </div>
+
+              <p className="mt-6 text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">
+                {t("staffLogin")}
+              </p>
+
+              <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
+                {t("welcomeBack")}
+              </h1>
+
+              <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-slate-500">
+                {t("enterMobileToContinue") ||
+                  "Use your registered mobile number to receive an OTP."}
+              </p>
+            </div>
+
+            {error && (
+              <div className="mt-6">
+                <ErrorState error={error} onRetry={() => setError(null)} />
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="mt-8" noValidate>
+              <div>
+                <label
+                  htmlFor="phone"
+                  className="mb-2 block text-sm font-bold text-slate-700"
+                >
+                  {t("mobileNumber")}
+                </label>
+
+                <div className="flex overflow-hidden rounded-xl border border-slate-200 bg-white focus-within:border-emerald-500 focus-within:ring-4 focus-within:ring-emerald-50">
+                  <span className="flex min-h-13 items-center border-r border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-600">
+                    +91
+                  </span>
+                  <input
+                    id="phone"
+                    type="tel"
+                    value={phone}
+                    maxLength={10}
+                    inputMode="numeric"
+                    autoComplete="tel"
+                    placeholder={t("mobileNumberPlaceholder")}
+                    onChange={(event) => {
+                      setPhone(
+                        event.target.value.replace(/\D/g, "").slice(0, 10),
+                      );
+                      setFieldError(null);
+                    }}
+                    className="min-h-13 min-w-0 flex-1 bg-white px-4 text-sm outline-none"
+                  />
+                </div>
+                {fieldError && (
+                  <p className="mt-2 text-xs text-red-500">{fieldError}</p>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="min-h-13 w-full rounded-xl bg-[#11a255] text-sm font-bold text-white transition hover:bg-[#0e8b49] disabled:cursor-not-allowed disabled:bg-emerald-300"
+              >
+                {submitting ? t("verifying") : `${t("continueToOtp")} →`}
+              </button>
+
+              <p className="mt-3 text-center text-xs leading-5 text-slate-400">
+                {t("otpWillBeSent")}
+              </p>
+            </form>
+
+            <div className="mt-7 border-t border-slate-100 pt-5 text-center">
+              <p className="text-sm text-slate-500">
+                {t("noOfficerAccount")}{" "}
+                <button
+                  type="button"
+                  onClick={() => navigate("/staff-register")}
+                  className="font-bold text-emerald-700 hover:underline"
+                >
+                  {t("applyForAccount")}
+                </button>
+              </p>
+
+              <p className="mt-3 text-sm text-slate-500">
+                {t("areYouFarmer")}{" "}
+                <button
+                  type="button"
+                  onClick={() => navigate("/login")}
+                  className="font-bold text-emerald-700 hover:underline"
+                >
+                  {t("farmerLogin")}
+                </button>
+              </p>
+            </div>
+          </div>
+        </section>
+      </main>
     </div>
   );
 }

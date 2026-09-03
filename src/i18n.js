@@ -11,12 +11,13 @@ import or from "./locales/or/translation.json";
 import ta from "./locales/ta/translation.json";
 import kn from "./locales/kn/translation.json";
 
+import { isSupportedLanguage } from "./lib/languages";
+
 const getInitialLanguage = () => {
   try {
     const stored = localStorage.getItem("farmqueueLanguage");
-    const supportedLanguages = ["en", "hi", "pa", "mr", "te", "bn", "or", "ta", "kn"];
 
-    if (supportedLanguages.includes(stored)) {
+    if (isSupportedLanguage(stored)) {
       return stored;
     }
   } catch {
@@ -25,6 +26,20 @@ const getInitialLanguage = () => {
 
   return "en";
 };
+
+/**
+ * Whether the farmer has ever picked a language.
+ *
+ * The chooser is shown on first launch only; once a choice exists the app opens
+ * straight onto the portal picker instead of asking again every visit.
+ */
+export function hasStoredLanguage() {
+  try {
+    return isSupportedLanguage(localStorage.getItem("farmqueueLanguage"));
+  } catch {
+    return false;
+  }
+}
 
 i18n
   .use(initReactI18next)

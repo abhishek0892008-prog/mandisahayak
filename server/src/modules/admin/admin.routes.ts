@@ -869,6 +869,187 @@ export function buildAdminRouter(): Router {
     }),
   );
 
+  // ---------------------------------------------------------------------------
+  // Officer registration requests
+  //
+  // The review queue for `POST /auth/staff/register`. Approval is the ONLY
+  // path by which a public application becomes an officer, and it reuses
+  // `repo.createOfficer` so a self-registered officer is indistinguishable
+  // from an administrator-created one once it exists.
+  // ---------------------------------------------------------------------------
+
+  declare(
+    'GET',
+    '/admin/officer-registrations',
+    'officer.create',
+    'List officer account applications awaiting review.',
+  );
+  router.get(
+    '/admin/officer-registrations',
+    requirePermission('officer.create'),
+    asyncHandler(async (req, res) => {
+      const status = req.query.status ? String(req.query.status).toUpperCase() : 'PENDING';
+
+      if (!['PENDING', 'APPROVED', 'REJECTED', 'ALL'].includes(status)) {
+        throw badRequest(ErrorCodes.VALIDATION_FAILED, 'status invalid', {
+          status: 'STATUS_INVALID',
+        });
+      }
+
+      const rows = await withTransaction((client) =>
+        repo.listRegistrationRequests(client, status === 'ALL' ? null : status),
+      );
+
+      sendData(res, 200, {
+        requests: rows.map((r) => ({
+          id: r.id,
+          fullName: r.full_name,
+          phone: r.phone_e164,
+          username: r.username,
+          employeeCode: r.employee_code,
+          designation: r.designation,
+          requestedCentre: { id: r.requested_centre_id, name: r.centre_name },
+          district: r.district_name,
+          status: r.status,
+          submittedAt: r.created_at.toISOString(),
+          decidedAt: r.decided_at ? r.decided_at.toISOString() : null,
+          decisionNote: r.decision_note,
+        })),
+      });
+    }),
+  );
+
+  declare(
+    'POST',
+    '/admin/officer-registrations/:id/approve',
+    'officer.create',
+    'Approve an application: creates the officer and assigns the requested centre.',
+  );
+  router.post(
+    '/admin/officer-registrations/:id/approve',
+    requirePermission('officer.create'),
+    asyncHandler(async (req, res) => {
+      const id = parse(Uuid, req.params.id);
+      const note = req.body?.note ? String(req.body.note).slice(0, 500) : null;
+
+      const result = await withTransaction(async (client) => {
+        const request = await repo.registrationRequestById(client, id);
+        if (!request) throw notFound('Registration request not found');
+
+        if (request.status !== 'PENDING') {
+          throw conflict(
+            ErrorCodes.REGISTRATION_REQUEST_DECIDED,
+            'That application has already been decided',
+          );
+        }
+
+        // Re-checked at approval, not just at submission: an identifier that
+        // was free when the application was filed may have been taken since.
+        if (await repo.usernameTaken(client, request.username)) {
+          throw conflict(ErrorCodes.USERNAME_TAKEN, 'That username is already in use');
+        }
+        if (await repo.phoneTaken(client, request.phone_e164)) {
+          throw conflict(
+            ErrorCodes.PHONE_ALREADY_REGISTERED,
+            'That phone number already belongs to an account',
+          );
+        }
+        if (await repo.employeeCodeTaken(client, request.employee_code)) {
+          throw conflict(ErrorCodes.EMPLOYEE_CODE_TAKEN, 'That employee code is already in use');
+        }
+
+        // The hash the applicant's own password produced at submission is
+        // carried across unchanged, so their chosen password keeps working and
+        // no plaintext was ever stored to get here.
+        const ids = await repo.createOfficer(client, {
+          fullName: request.full_name,
+          username: request.username,
+          passwordHash: request.password_hash,
+          phoneE164: request.phone_e164,
+          employeeCode: request.employee_code,
+          designation: request.designation,
+          createdByUserId: req.actor!.userId,
+        });
+
+        const assigned = await repo.assignOfficer(
+          client,
+          ids.officerId,
+          request.requested_centre_id,
+          req.actor!.userId,
+        );
+
+        await repo.settleRegistrationRequest(
+          client,
+          id,
+          'APPROVED',
+          req.actor!.userId,
+          note,
+          ids.officerId,
+        );
+
+        await auditOfficer(client, req, AuditActions.OFFICER_REGISTRATION_APPROVED, ids.officerId, null, {
+          requestId: id,
+          employeeCode: request.employee_code,
+          username: request.username,
+          centreId: request.requested_centre_id,
+          assigned,
+        });
+
+        return { employeeCode: request.employee_code, username: request.username, assigned };
+      });
+
+      sendData(res, 201, {
+        ...result,
+        status: 'ACTIVE',
+        note: 'The officer can now sign in and is assigned to the centre they applied for.',
+      });
+    }),
+  );
+
+  declare(
+    'POST',
+    '/admin/officer-registrations/:id/reject',
+    'officer.create',
+    'Reject an application. No account is created.',
+  );
+  router.post(
+    '/admin/officer-registrations/:id/reject',
+    requirePermission('officer.create'),
+    asyncHandler(async (req, res) => {
+      const id = parse(Uuid, req.params.id);
+      const note = req.body?.note ? String(req.body.note).slice(0, 500) : null;
+
+      await withTransaction(async (client) => {
+        const request = await repo.registrationRequestById(client, id);
+        if (!request) throw notFound('Registration request not found');
+
+        if (request.status !== 'PENDING') {
+          throw conflict(
+            ErrorCodes.REGISTRATION_REQUEST_DECIDED,
+            'That application has already been decided',
+          );
+        }
+
+        await repo.settleRegistrationRequest(client, id, 'REJECTED', req.actor!.userId, note, null);
+
+        // Entity is the request, not an officer: rejecting creates no officer
+        // to point at.
+        await writeAudit(client, {
+          action: AuditActions.OFFICER_REGISTRATION_REJECTED,
+          entityType: 'officer_registration_request',
+          entityId: id,
+          actorUserId: req.actor!.userId,
+          actorRole: 'ADMIN',
+          actorIp: ctx(req).ip,
+          requestId: ctx(req).requestId,
+          metadata: { employeeCode: request.employee_code, username: request.username },
+        });
+      });
+
+      sendData(res, 200, { id, status: 'REJECTED' });
+    }),
+  );
+
   return router;
 }
 

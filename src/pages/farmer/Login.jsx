@@ -60,7 +60,7 @@ function Login() {
         <div className="mx-auto flex min-h-[72px] w-full max-w-[1280px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
           <button
             type="button"
-            onClick={() => navigate("/")}
+            onClick={() => navigate("/portal")}
             className="flex items-center gap-3 text-left"
           >
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 text-xl">
@@ -83,7 +83,7 @@ function Login() {
 
             <button
               type="button"
-              onClick={() => navigate("/")}
+              onClick={() => navigate("/register")}
               className="rounded-full border border-white/30 bg-white px-4 py-2 text-sm font-bold text-[#0b7f43] transition hover:bg-white/90"
             >
               {t("register")}
@@ -202,7 +202,7 @@ function Login() {
 
             <button
               type="button"
-              onClick={() => navigate("/")}
+              onClick={() => navigate("/register")}
               className="flex min-h-12 w-full items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 px-5 text-sm font-bold text-[#0b7f43] transition hover:bg-emerald-100"
             >
               {t("registerAsFarmer")}

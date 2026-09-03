@@ -15,7 +15,7 @@
  *
  * Nothing here trusts frontend validation; every rule is re-applied server-side.
  */
-import { z } from 'zod';
+import { z } from "zod";
 
 /**
  * Accepts what an Indian farmer would actually type — 10 digits, or with a
@@ -25,43 +25,51 @@ import { z } from 'zod';
 export const PhoneSchema = z
   .string()
   .trim()
-  .transform((raw) => raw.replace(/[\s()-]/g, ''))
+  .transform((raw) => raw.replace(/[\s()-]/g, ""))
   .superRefine((v, ctx) => {
-    const digits = v.replace(/^\+/, '');
+    const digits = v.replace(/^\+/, "");
     if (!/^\d+$/.test(digits)) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'PHONE_NOT_NUMERIC' });
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "PHONE_NOT_NUMERIC",
+      });
     }
   })
   .transform((v) => {
-    let d = v.replace(/^\+/, '');
-    if (d.length === 11 && d.startsWith('0')) d = d.slice(1);
+    let d = v.replace(/^\+/, "");
+    if (d.length === 11 && d.startsWith("0")) d = d.slice(1);
     if (d.length === 10) d = `91${d}`;
     return `+${d}`;
   })
   .refine((v) => /^\+91[6-9]\d{9}$/.test(v), {
-    message: 'PHONE_INVALID_INDIAN_MOBILE',
+    message: "PHONE_INVALID_INDIAN_MOBILE",
   });
 
 export const FullNameSchema = z
   .string()
   .trim()
-  .min(2, 'NAME_TOO_SHORT')
-  .max(120, 'NAME_TOO_LONG')
-  .refine((v) => /^[\p{L}\p{M}][\p{L}\p{M}\s.'-]*$/u.test(v), 'NAME_INVALID_CHARACTERS');
+  .min(2, "NAME_TOO_SHORT")
+  .max(120, "NAME_TOO_LONG")
+  .refine(
+    (v) => /^[\p{L}\p{M}][\p{L}\p{M}\s.'-]*$/u.test(v),
+    "NAME_INVALID_CHARACTERS",
+  );
 
-export const LocaleSchema = z.enum(['en', 'hi']);
+export const LocaleSchema = z.enum(["en", "hi"]);
 
 export const ConsentSchema = z.object({
-  policyVersion: z.string().trim().min(1, 'CONSENT_VERSION_REQUIRED').max(32),
-  accepted: z.literal(true, { errorMap: () => ({ message: 'CONSENT_REQUIRED' }) }),
+  policyVersion: z.string().trim().min(1, "CONSENT_VERSION_REQUIRED").max(32),
+  accepted: z.literal(true, {
+    errorMap: () => ({ message: "CONSENT_REQUIRED" }),
+  }),
 });
 
 export const RegisterStartSchema = z.object({
   fullName: FullNameSchema,
   phone: PhoneSchema,
-  districtId: z.string().uuid('DISTRICT_ID_INVALID'),
-  villageId: z.string().uuid('VILLAGE_ID_INVALID').optional().nullable(),
-  locale: LocaleSchema.default('en'),
+  districtId: z.string().uuid("DISTRICT_ID_INVALID"),
+  villageId: z.string().uuid("VILLAGE_ID_INVALID").optional().nullable(),
+  locale: LocaleSchema.default("en"),
   consent: ConsentSchema,
 });
 export type RegisterStartInput = z.infer<typeof RegisterStartSchema>;
@@ -71,41 +79,60 @@ export const LoginStartSchema = z.object({
 });
 
 export const OtpVerifySchema = z.object({
-  challengeId: z.string().uuid('CHALLENGE_ID_INVALID'),
+  challengeId: z.string().uuid("CHALLENGE_ID_INVALID"),
   otp: z
     .string()
     .trim()
-    .regex(/^\d{4,8}$/, 'OTP_FORMAT_INVALID'),
+    .regex(/^\d{4,8}$/, "OTP_FORMAT_INVALID"),
 });
 
 export const OtpResendSchema = z.object({
-  challengeId: z.string().uuid('CHALLENGE_ID_INVALID'),
+  challengeId: z.string().uuid("CHALLENGE_ID_INVALID"),
 });
 
+export const UsernameSchema = z
+  .string()
+  .trim()
+  .min(3, "USERNAME_INVALID")
+  .max(64, "USERNAME_INVALID")
+  .regex(/^[a-z0-9._-]+$/, "USERNAME_INVALID");
+
 export const StaffLoginSchema = z.object({
-  username: z
-    .string()
-    .trim()
-    .min(3, 'USERNAME_INVALID')
-    .max(64, 'USERNAME_INVALID')
-    .regex(/^[a-z0-9._-]+$/, 'USERNAME_INVALID'),
-  password: z.string().min(1, 'PASSWORD_REQUIRED').max(512, 'PASSWORD_TOO_LONG'),
+  phone: PhoneSchema,
 });
+
+/**
+ * An application for an officer account.
+ *
+ * A minimum password length is enforced here because this is the one path
+ * where the password is chosen by the applicant rather than issued by an
+ * administrator. Twelve characters with no composition rule is the guidance
+ * this project already follows for staff credentials.
+ */
+export const StaffRegisterSchema = z.object({
+  fullName: FullNameSchema,
+  phone: PhoneSchema,
+  districtId: z.string().uuid("DISTRICT_ID_INVALID"),
+  centreId: z.string().uuid("CENTRE_ID_INVALID"),
+  cropId: z.string().uuid("CROP_ID_INVALID"),
+  consent: ConsentSchema,
+});
+export type StaffRegisterInput = z.infer<typeof StaffRegisterSchema>;
 
 export const UpdateMeSchema = z
   .object({
     fullName: FullNameSchema.optional(),
     locale: LocaleSchema.optional(),
-    districtId: z.string().uuid('DISTRICT_ID_INVALID').optional(),
-    villageId: z.string().uuid('VILLAGE_ID_INVALID').nullable().optional(),
+    districtId: z.string().uuid("DISTRICT_ID_INVALID").optional(),
+    villageId: z.string().uuid("VILLAGE_ID_INVALID").nullable().optional(),
   })
-  .refine((v) => Object.keys(v).length > 0, 'NO_FIELDS_TO_UPDATE');
+  .refine((v) => Object.keys(v).length > 0, "NO_FIELDS_TO_UPDATE");
 
 /** Converts a Zod failure into the API's field-error shape. */
 export function zodFields(err: z.ZodError): Record<string, string> {
   const out: Record<string, string> = {};
   for (const issue of err.issues) {
-    const key = issue.path.join('.') || '_';
+    const key = issue.path.join(".") || "_";
     if (!out[key]) out[key] = issue.message;
   }
   return out;

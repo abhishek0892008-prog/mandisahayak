@@ -126,7 +126,7 @@ function Registration() {
         <div className="mx-auto flex min-h-[72px] w-full max-w-[1280px] items-center justify-between px-4 sm:px-6 lg:px-8">
           <button
             type="button"
-            onClick={() => navigate("/")}
+            onClick={() => navigate("/portal")}
             className="flex items-center gap-3 text-left"
           >
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 text-xl">
@@ -325,14 +325,20 @@ function Registration() {
                     <select
                       id="districtId"
                       value={districtId}
-                      disabled={districts.loading || Boolean(districts.error)}
+                      // Disabled only while the list is in flight. A failed
+                      // load must stay operable — it is paired with the retry
+                      // below, and disabling on error leaves the farmer with a
+                      // dead control and no way to recover short of a reload.
+                      disabled={districts.loading}
                       onChange={(event) => {
                         setDistrictId(event.target.value);
                         setVillageId("");
                         clearFieldError("districtId");
                         clearFieldError("villageId");
                       }}
-                      className={inputClasses(fieldErrors.districtId)}
+                      className={inputClasses(
+                        fieldErrors.districtId || districts.error
+                      )}
                     >
                       <option value="">
                         {districts.loading
@@ -348,9 +354,20 @@ function Registration() {
                     </select>
 
                     {districts.error && (
-                      <p className="mt-1.5 text-xs font-medium text-red-500">
-                        {translateError(t, districts.error)}
-                      </p>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <p className="text-xs font-medium text-red-500">
+                          {t("districtsUnavailable")}{" "}
+                          {translateError(t, districts.error)}
+                        </p>
+
+                        <button
+                          type="button"
+                          onClick={districts.reload}
+                          className="text-xs font-bold text-green-700 hover:underline"
+                        >
+                          {t("tryAgain")}
+                        </button>
+                      </div>
                     )}
 
                     {fieldErrors.districtId && (

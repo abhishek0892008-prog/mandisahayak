@@ -649,3 +649,82 @@ export async function assignmentsForOfficer(employeeCode: string) {
   );
   return res.rows as Array<Record<string, unknown>>;
 }
+
+// ---------------------------------------------------------------------------
+// Officer registration requests
+//
+// A request is an application, never an account. Nothing here grants anything;
+// `approveRegistrationRequest` is the single point where one becomes an
+// officer, and it goes through the same `createOfficer` path an administrator
+// uses directly.
+// ---------------------------------------------------------------------------
+
+export type RegistrationRequestRow = {
+  id: string;
+  full_name: string;
+  phone_e164: string;
+  username: string;
+  employee_code: string;
+  designation: string | null;
+  requested_centre_id: string;
+  centre_name: string;
+  district_name: string;
+  status: string;
+  created_at: Date;
+  decided_at: Date | null;
+  decision_note: string | null;
+};
+
+export async function listRegistrationRequests(
+  client: PoolClient,
+  status: string | null,
+): Promise<RegistrationRequestRow[]> {
+  const res = await client.query<RegistrationRequestRow>(
+    `SELECT r.id, r.full_name, r.phone_e164, r.username, r.employee_code, r.designation,
+            r.requested_centre_id, pc.name AS centre_name, d.name AS district_name,
+            r.status, r.created_at, r.decided_at, r.decision_note
+       FROM officer_registration_requests r
+       JOIN procurement_centres pc ON pc.id = r.requested_centre_id
+       JOIN districts d ON d.id = pc.district_id
+      WHERE ($1::text IS NULL OR r.status = $1::text)
+      ORDER BY r.created_at DESC
+      LIMIT 200`,
+    [status],
+  );
+  return res.rows;
+}
+
+/** The full row including the stored hash. Never widen this into an API view. */
+export async function registrationRequestById(
+  client: PoolClient,
+  id: string,
+): Promise<(RegistrationRequestRow & { password_hash: string }) | null> {
+  const res = await client.query<RegistrationRequestRow & { password_hash: string }>(
+    `SELECT r.id, r.full_name, r.phone_e164, r.username, r.employee_code, r.designation,
+            r.requested_centre_id, pc.name AS centre_name, d.name AS district_name,
+            r.status, r.created_at, r.decided_at, r.decision_note, r.password_hash
+       FROM officer_registration_requests r
+       JOIN procurement_centres pc ON pc.id = r.requested_centre_id
+       JOIN districts d ON d.id = pc.district_id
+      WHERE r.id = $1`,
+    [id],
+  );
+  return res.rows[0] ?? null;
+}
+
+export async function settleRegistrationRequest(
+  client: PoolClient,
+  id: string,
+  status: 'APPROVED' | 'REJECTED',
+  byUserId: string,
+  note: string | null,
+  createdOfficerId: string | null,
+): Promise<void> {
+  await client.query(
+    `UPDATE officer_registration_requests
+        SET status = $2, decided_at = now(), decided_by_user_id = $3,
+            decision_note = $4, created_officer_id = $5
+      WHERE id = $1`,
+    [id, status, byUserId, note, createdOfficerId],
+  );
+}

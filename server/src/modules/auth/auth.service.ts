@@ -6,25 +6,29 @@
  * account — a farmer registration can only ever produce the FARMER role, so no
  * request payload can escalate privilege.
  */
-import type { PoolClient } from 'pg';
-import { getConfig } from '../../core/config.ts';
-import { sha256, verifyPassword } from '../../core/crypto.ts';
+import type { PoolClient } from "pg";
+import { getConfig } from "../../core/config.ts";
+import { sha256 } from "../../core/crypto.ts";
 import {
   AppError,
   ErrorCodes,
   conflict,
   unprocessable,
   unauthenticated,
-} from '../../core/errors.ts';
-import { withTransaction } from '../../core/db.ts';
-import { writeAudit, AuditActions } from '../../core/audit.ts';
-import { createSession, revokeSession } from '../../core/session.ts';
-import type { CreatedSession } from '../../core/session.ts';
-import { issueChallenge, verifyChallenge } from './otp.service.ts';
-import type { ChallengeRow, ChallengeView } from './otp.service.ts';
-import type { RegisterStartInput } from './auth.schemas.ts';
+} from "../../core/errors.ts";
+import { withTransaction } from "../../core/db.ts";
+import { writeAudit, AuditActions } from "../../core/audit.ts";
+import { createSession, revokeSession } from "../../core/session.ts";
+import type { CreatedSession } from "../../core/session.ts";
+import { issueChallenge, verifyChallenge } from "./otp.service.ts";
+import type { ChallengeRow, ChallengeView } from "./otp.service.ts";
+import type { RegisterStartInput, StaffRegisterInput } from "./auth.schemas.ts";
 
-export type RequestCtx = { ip: string | null; userAgent: string | null; requestId: string | null };
+export type RequestCtx = {
+  ip: string | null;
+  userAgent: string | null;
+  requestId: string | null;
+};
 
 // ---------------------------------------------------------------------------
 // Farmer registration
@@ -37,7 +41,10 @@ export async function startRegistration(
 ): Promise<ChallengeView> {
   const cfg = getConfig();
 
-  const existing = await client.query('SELECT id FROM users WHERE phone_e164 = $1', [input.phone]);
+  const existing = await client.query(
+    "SELECT id FROM users WHERE phone_e164 = $1",
+    [input.phone],
+  );
   if (existing.rowCount && existing.rowCount > 0) {
     /*
      * DISCLOSED TRADE-OFF.
@@ -49,29 +56,36 @@ export async function startRegistration(
      */
     await writeAudit(client, {
       action: AuditActions.REGISTRATION_STARTED,
-      entityType: 'registration',
-      actorRole: 'SYSTEM',
+      entityType: "registration",
+      actorRole: "SYSTEM",
       actorIp: ctx.ip,
       requestId: ctx.requestId,
-      metadata: { outcome: 'DUPLICATE_PHONE', phone: input.phone },
+      metadata: { outcome: "DUPLICATE_PHONE", phone: input.phone },
     });
-    throw conflict(ErrorCodes.PHONE_ALREADY_REGISTERED, 'Phone already registered');
+    throw conflict(
+      ErrorCodes.PHONE_ALREADY_REGISTERED,
+      "Phone already registered",
+    );
   }
 
-  const district = await client.query('SELECT id, state_id FROM districts WHERE id = $1', [
-    input.districtId,
-  ]);
+  const district = await client.query(
+    "SELECT id, state_id FROM districts WHERE id = $1",
+    [input.districtId],
+  );
   if (district.rowCount === 0) {
-    throw unprocessable(ErrorCodes.DISTRICT_NOT_FOUND, 'District not found');
+    throw unprocessable(ErrorCodes.DISTRICT_NOT_FOUND, "District not found");
   }
 
   if (input.villageId) {
     const village = await client.query(
-      'SELECT id FROM villages WHERE id = $1 AND district_id = $2',
+      "SELECT id FROM villages WHERE id = $1 AND district_id = $2",
       [input.villageId, input.districtId],
     );
     if (village.rowCount === 0) {
-      throw unprocessable(ErrorCodes.VILLAGE_NOT_IN_DISTRICT, 'Village is not in that district');
+      throw unprocessable(
+        ErrorCodes.VILLAGE_NOT_IN_DISTRICT,
+        "Village is not in that district",
+      );
     }
   }
 
@@ -97,7 +111,7 @@ export async function startRegistration(
   );
 
   const { view } = await issueChallenge(client, {
-    purpose: 'FARMER_REGISTER',
+    purpose: "FARMER_REGISTER",
     phone: input.phone,
     pendingRegistrationId: pending.rows[0].id,
     ip: ctx.ip,
@@ -105,12 +119,12 @@ export async function startRegistration(
 
   await writeAudit(client, {
     action: AuditActions.REGISTRATION_STARTED,
-    entityType: 'pending_registration',
+    entityType: "pending_registration",
     entityId: pending.rows[0].id,
-    actorRole: 'SYSTEM',
+    actorRole: "SYSTEM",
     actorIp: ctx.ip,
     requestId: ctx.requestId,
-    metadata: { outcome: 'OTP_ISSUED', districtId: input.districtId },
+    metadata: { outcome: "OTP_ISSUED", districtId: input.districtId },
   });
 
   return view;
@@ -141,10 +155,10 @@ export async function startFarmerLogin(
   );
 
   const row = user.rows[0];
-  const deliverable = Boolean(row) && row.status === 'ACTIVE';
+  const deliverable = Boolean(row) && row.status === "ACTIVE";
 
   const { view } = await issueChallenge(client, {
-    purpose: 'FARMER_LOGIN',
+    purpose: "FARMER_LOGIN",
     phone,
     userId: row?.id ?? null,
     ip: ctx.ip,
@@ -153,9 +167,9 @@ export async function startFarmerLogin(
 
   await writeAudit(client, {
     action: AuditActions.LOGIN_OTP_REQUESTED,
-    entityType: 'user',
+    entityType: "user",
     entityId: row?.id ?? null,
-    actorRole: 'SYSTEM',
+    actorRole: "SYSTEM",
     actorIp: ctx.ip,
     requestId: ctx.requestId,
     metadata: { delivered: deliverable, phone },
@@ -165,74 +179,186 @@ export async function startFarmerLogin(
 }
 
 // ---------------------------------------------------------------------------
-// Staff login: password, then OTP second factor
+// Officer self-registration
+// ---------------------------------------------------------------------------
+
+/**
+ * Creates an officer account and starts mobile OTP verification.
+ */
+export async function submitOfficerRegistration(
+  client: PoolClient,
+  input: StaffRegisterInput,
+  ctx: RequestCtx,
+): Promise<ChallengeView> {
+  // The centre must exist, be active, and actually sit in the district the
+  // applicant named. Trusting the pair would let a mismatched request through
+  // and leave an administrator to spot it by eye.
+  const centre = await client.query<{
+    id: string;
+    district_id: string;
+    status: string;
+  }>(`SELECT id, district_id, status FROM procurement_centres WHERE id = $1`, [
+    input.centreId,
+  ]);
+
+  const row = centre.rows[0];
+
+  if (!row || row.status !== "ACTIVE") {
+    throw unprocessable(
+      ErrorCodes.CENTRE_NOT_AVAILABLE,
+      "That centre is not available.",
+    );
+  }
+
+  if (row.district_id !== input.districtId) {
+    throw unprocessable(
+      ErrorCodes.CENTRE_NOT_IN_DISTRICT,
+      "That centre is not in the selected district.",
+    );
+  }
+
+  const acceptedCrop = await client.query(
+    `SELECT 1 FROM centre_crop_configurations
+      WHERE centre_id = $1 AND crop_id = $2
+        AND is_active = true
+        AND effective_from <= CURRENT_DATE
+        AND (effective_to IS NULL OR effective_to >= CURRENT_DATE)
+      LIMIT 1`,
+    [input.centreId, input.cropId],
+  );
+
+  if ((acceptedCrop.rowCount ?? 0) === 0) {
+    throw unprocessable(
+      ErrorCodes.CROP_NOT_CONFIGURED_AT_CENTRE,
+      "That crop is not accepted at the selected centre.",
+    );
+  }
+
+  const existing = await client.query<{ id: string }>(
+    `SELECT id FROM users WHERE phone_e164 = $1`,
+    [input.phone],
+  );
+  if ((existing.rowCount ?? 0) > 0) {
+    throw conflict(
+      ErrorCodes.PHONE_ALREADY_REGISTERED,
+      "Phone already registered.",
+    );
+  }
+
+  const user = await client.query<{ id: string }>(
+    `INSERT INTO users (full_name, phone_e164, locale)
+     VALUES ($1, $2, 'en') RETURNING id`,
+    [input.fullName, input.phone],
+  );
+  const userId = user.rows[0].id;
+
+  const officer = await client.query<{ id: string }>(
+    `INSERT INTO officers (user_id, created_by_user_id)
+     VALUES ($1, NULL) RETURNING id`,
+    [userId],
+  );
+
+  await client.query(
+    `INSERT INTO user_roles (user_id, role_id)
+     SELECT $1, id FROM roles WHERE code = 'OFFICER'`,
+    [userId],
+  );
+
+  await client.query(
+    `INSERT INTO officer_centre_assignments (officer_id, centre_id)
+     VALUES ($1, $2)`,
+    [officer.rows[0].id, input.centreId],
+  );
+
+  const { view } = await issueChallenge(client, {
+    purpose: "STAFF_2FA",
+    phone: input.phone,
+    userId,
+    ip: ctx.ip,
+  });
+
+  await writeAudit(client, {
+    action: AuditActions.OFFICER_REGISTRATION_REQUESTED,
+    entityType: "officer",
+    entityId: officer.rows[0].id,
+    actorUserId: userId,
+    actorRole: "SYSTEM",
+    actorIp: ctx.ip,
+    requestId: ctx.requestId,
+    metadata: {
+      requestedCentreId: input.centreId,
+      cropId: input.cropId,
+      approvalRequired: false,
+    },
+  });
+
+  return view;
+}
+
+// ---------------------------------------------------------------------------
+// Staff login: mobile OTP
 // ---------------------------------------------------------------------------
 
 export async function startStaffLogin(
   client: PoolClient,
-  username: string,
-  password: string,
+  phone: string,
   ctx: RequestCtx,
 ): Promise<ChallengeView> {
   const res = await client.query<{
     id: string;
-    password_hash: string | null;
     phone_e164: string | null;
     status: string;
     roles: string[] | null;
   }>(
-    `SELECT u.id, u.password_hash, u.phone_e164, u.status,
+    `SELECT u.id, u.phone_e164, u.status,
             (SELECT array_agg(r.code) FROM user_roles ur JOIN roles r ON r.id = ur.role_id
               WHERE ur.user_id = u.id) AS roles
-       FROM users u WHERE u.username = $1`,
-    [username],
+       FROM users u WHERE u.phone_e164 = $1`,
+    [phone],
   );
 
   const user = res.rows[0];
-
-  // verifyPassword burns equivalent scrypt work when the user does not exist,
-  // so "no such account" is not detectably faster than "wrong password".
-  const passwordOk = verifyPassword(password, user?.password_hash ?? null);
   const roles = user?.roles ?? [];
-  const isStaff = roles.includes('OFFICER') || roles.includes('ADMIN');
+  const isStaff = roles.includes("OFFICER") || roles.includes("ADMIN");
 
-  if (!user || !passwordOk || !isStaff || user.status !== 'ACTIVE' || !user.phone_e164) {
+  if (!user || !isStaff || user.status !== "ACTIVE" || !user.phone_e164) {
     await writeAudit(client, {
       action: AuditActions.STAFF_PASSWORD_FAILED,
-      entityType: 'user',
+      entityType: "user",
       entityId: user?.id ?? null,
-      actorRole: 'SYSTEM',
+      actorRole: "SYSTEM",
       actorIp: ctx.ip,
       requestId: ctx.requestId,
       metadata: {
-        username,
+        phone,
         reason: !user
-          ? 'NO_SUCH_USER'
-          : !passwordOk
-            ? 'BAD_PASSWORD'
-            : !isStaff
-              ? 'NOT_STAFF'
-              : user.status !== 'ACTIVE'
-                ? 'INACTIVE'
-                : 'NO_PHONE_FOR_2FA',
+          ? "NO_SUCH_USER"
+          : !isStaff
+            ? "NOT_STAFF"
+            : user.status !== "ACTIVE"
+              ? "INACTIVE"
+              : "NO_PHONE_FOR_2FA",
       },
     });
-    throw unauthenticated(ErrorCodes.INVALID_CREDENTIALS, 'Invalid credentials');
+    throw unauthenticated(
+      ErrorCodes.INVALID_CREDENTIALS,
+      "Invalid credentials",
+    );
   }
 
   await writeAudit(client, {
     action: AuditActions.STAFF_PASSWORD_VERIFIED,
-    entityType: 'user',
+    entityType: "user",
     entityId: user.id,
     actorUserId: user.id,
-    actorRole: roles.includes('ADMIN') ? 'ADMIN' : 'OFFICER',
+    actorRole: roles.includes("ADMIN") ? "ADMIN" : "OFFICER",
     actorIp: ctx.ip,
     requestId: ctx.requestId,
-    metadata: { username, secondFactor: 'OTP' },
+    metadata: { phone, secondFactor: "OTP" },
   });
 
   const { view } = await issueChallenge(client, {
-    purpose: 'STAFF_2FA',
+    purpose: "STAFF_2FA",
     phone: user.phone_e164,
     userId: user.id,
     ip: ctx.ip,
@@ -245,7 +371,11 @@ export async function startStaffLogin(
 // OTP verification -> session
 // ---------------------------------------------------------------------------
 
-export type VerifyResult = { session: CreatedSession; userId: string; roles: string[] };
+export type VerifyResult = {
+  session: CreatedSession;
+  userId: string;
+  roles: string[];
+};
 
 /**
  * TWO TRANSACTIONS, DELIBERATELY.
@@ -275,12 +405,12 @@ export async function verifyOtpAndCreateSession(
     if (!result.ok) {
       await writeAudit(client, {
         action:
-          result.reason === 'EXHAUSTED'
+          result.reason === "EXHAUSTED"
             ? AuditActions.OTP_ATTEMPTS_EXHAUSTED
             : AuditActions.OTP_FAILED,
-        entityType: 'otp_challenge',
+        entityType: "otp_challenge",
         entityId: challengeId,
-        actorRole: 'SYSTEM',
+        actorRole: "SYSTEM",
         actorIp: ctx.ip,
         requestId: ctx.requestId,
         metadata: { reason: result.reason },
@@ -291,7 +421,11 @@ export async function verifyOtpAndCreateSession(
 
   if (!outcome.ok) {
     // One opaque code for every failure mode.
-    throw new AppError(400, ErrorCodes.OTP_INVALID, 'OTP invalid, expired or already used');
+    throw new AppError(
+      400,
+      ErrorCodes.OTP_INVALID,
+      "OTP invalid, expired or already used",
+    );
   }
 
   return withTransaction((client) => completeLogin(client, outcome.row, ctx));
@@ -304,13 +438,17 @@ async function completeLogin(
 ): Promise<VerifyResult> {
   let userId: string;
 
-  if (row.purpose === 'FARMER_REGISTER') {
-    userId = await completeRegistration(client, row.pending_registration_id, ctx);
+  if (row.purpose === "FARMER_REGISTER") {
+    userId = await completeRegistration(
+      client,
+      row.pending_registration_id,
+      ctx,
+    );
   } else {
     if (!row.user_id) {
       // A decoy login challenge that somehow verified. Cannot happen — a decoy's
       // OTP is never delivered — but failing closed is the only safe response.
-      throw new AppError(400, ErrorCodes.OTP_INVALID, 'OTP invalid');
+      throw new AppError(400, ErrorCodes.OTP_INVALID, "OTP invalid");
     }
     userId = row.user_id;
   }
@@ -320,18 +458,30 @@ async function completeLogin(
     [userId],
   );
   const roles = roleRes.rows.map((r) => r.code);
-  const isStaff = roles.includes('OFFICER') || roles.includes('ADMIN');
+  const isStaff = roles.includes("OFFICER") || roles.includes("ADMIN");
 
-  const session = await createSession(client, userId, isStaff, ctx.ip, ctx.userAgent);
+  const session = await createSession(
+    client,
+    userId,
+    isStaff,
+    ctx.ip,
+    ctx.userAgent,
+  );
 
-  await client.query('UPDATE users SET last_login_at = now() WHERE id = $1', [userId]);
+  await client.query("UPDATE users SET last_login_at = now() WHERE id = $1", [
+    userId,
+  ]);
 
   await writeAudit(client, {
     action: AuditActions.LOGIN_SUCCEEDED,
-    entityType: 'session',
+    entityType: "session",
     entityId: session.sessionId,
     actorUserId: userId,
-    actorRole: roles.includes('ADMIN') ? 'ADMIN' : roles.includes('OFFICER') ? 'OFFICER' : 'FARMER',
+    actorRole: roles.includes("ADMIN")
+      ? "ADMIN"
+      : roles.includes("OFFICER")
+        ? "OFFICER"
+        : "FARMER",
     actorIp: ctx.ip,
     requestId: ctx.requestId,
     metadata: { purpose: row.purpose, roles },
@@ -350,7 +500,8 @@ async function completeRegistration(
   pendingId: string | null,
   ctx: RequestCtx,
 ): Promise<string> {
-  if (!pendingId) throw new AppError(400, ErrorCodes.OTP_INVALID, 'OTP invalid');
+  if (!pendingId)
+    throw new AppError(400, ErrorCodes.OTP_INVALID, "OTP invalid");
 
   const res = await client.query<{
     id: string;
@@ -363,18 +514,25 @@ async function completeRegistration(
     consent_text_hash: Buffer;
     expires_at: Date;
     created_ip: string | null;
-  }>('SELECT * FROM pending_registrations WHERE id = $1 FOR UPDATE', [pendingId]);
+  }>("SELECT * FROM pending_registrations WHERE id = $1 FOR UPDATE", [
+    pendingId,
+  ]);
 
   const pending = res.rows[0];
   if (!pending || pending.expires_at <= new Date()) {
-    throw new AppError(400, ErrorCodes.OTP_INVALID, 'Registration expired');
+    throw new AppError(400, ErrorCodes.OTP_INVALID, "Registration expired");
   }
 
   // Re-check uniqueness inside the transaction: someone may have registered the
   // same number between start and verify.
-  const dup = await client.query('SELECT id FROM users WHERE phone_e164 = $1', [pending.phone_e164]);
+  const dup = await client.query("SELECT id FROM users WHERE phone_e164 = $1", [
+    pending.phone_e164,
+  ]);
   if (dup.rowCount && dup.rowCount > 0) {
-    throw conflict(ErrorCodes.PHONE_ALREADY_REGISTERED, 'Phone already registered');
+    throw conflict(
+      ErrorCodes.PHONE_ALREADY_REGISTERED,
+      "Phone already registered",
+    );
   }
 
   const user = await client.query<{ id: string }>(
@@ -398,17 +556,24 @@ async function completeRegistration(
   await client.query(
     `INSERT INTO consents (user_id, purpose, policy_version, policy_text_hash, granted_ip)
      VALUES ($1,'SERVICE_USE',$2,$3,$4), ($1,'SMS_NOTIFICATIONS',$2,$3,$4)`,
-    [userId, pending.consent_policy_version, pending.consent_text_hash, pending.created_ip],
+    [
+      userId,
+      pending.consent_policy_version,
+      pending.consent_text_hash,
+      pending.created_ip,
+    ],
   );
 
-  await client.query('DELETE FROM pending_registrations WHERE id = $1', [pendingId]);
+  await client.query("DELETE FROM pending_registrations WHERE id = $1", [
+    pendingId,
+  ]);
 
   await writeAudit(client, {
     action: AuditActions.REGISTRATION_COMPLETED,
-    entityType: 'user',
+    entityType: "user",
     entityId: userId,
     actorUserId: userId,
-    actorRole: 'FARMER',
+    actorRole: "FARMER",
     actorIp: ctx.ip,
     requestId: ctx.requestId,
     metadata: { consentVersion: pending.consent_policy_version },
@@ -428,13 +593,17 @@ export async function logout(
   roles: string[],
   ctx: RequestCtx,
 ): Promise<void> {
-  await revokeSession(client, sessionId, 'LOGOUT');
+  await revokeSession(client, sessionId, "LOGOUT");
   await writeAudit(client, {
     action: AuditActions.LOGOUT,
-    entityType: 'session',
+    entityType: "session",
     entityId: sessionId,
     actorUserId: userId,
-    actorRole: roles.includes('ADMIN') ? 'ADMIN' : roles.includes('OFFICER') ? 'OFFICER' : 'FARMER',
+    actorRole: roles.includes("ADMIN")
+      ? "ADMIN"
+      : roles.includes("OFFICER")
+        ? "OFFICER"
+        : "FARMER",
     actorIp: ctx.ip,
     requestId: ctx.requestId,
   });

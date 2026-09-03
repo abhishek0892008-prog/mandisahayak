@@ -55,7 +55,7 @@ function PaymentsPage() {
     { enabled: Boolean(centre.centreId) },
   );
 
-  const rows = bookings.data ?? [];
+  const rows = bookings.data?.bookings ?? [];
   const locale = i18n.language;
 
   async function setStatus(bookingCode, status) {
