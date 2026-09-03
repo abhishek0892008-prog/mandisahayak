@@ -20,18 +20,6 @@ function secondsUntil(iso, now) {
   return Math.max(0, Math.ceil((target - now) / 1000));
 }
 
-/**
- * OTP verification.
- *
- * The prototype's "Verify & Continue" navigated to the dashboard without
- * calling anything — any six digits worked. Here nothing proceeds without a
- * `201` from `POST /auth/otp/verify`, which is what actually creates the
- * session cookie.
- *
- * Expiry and resend cooldown are driven by the timestamps the server returned
- * (`expiresAt`, `resendAvailableAt`) rather than a hardcoded 30-second counter,
- * so the UI cannot disagree with the server about when a code dies.
- */
 function OTPVerification() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -50,8 +38,6 @@ function OTPVerification() {
 
   const inputRefs = useRef([]);
 
-  // One ticking clock drives both countdowns; setState in a timer callback is
-  // not a synchronous effect update, so it stays clear of cascading renders.
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
@@ -64,25 +50,28 @@ function OTPVerification() {
   const isStaff = initial?.purpose === "staff";
 
   const maskedPhone = useMemo(() => {
-    // Staff sign in by employee code; there is no phone in that challenge.
     if (isStaff) return initial?.username ?? "";
     if (!phone) return "+91 XXXXX XXXXX";
+
     return `+91 ${phone.slice(0, 2)}XXXXXX${phone.slice(-2)}`;
   }, [phone, isStaff, initial?.username]);
 
-  // Demo mode only. Re-requested whenever a new challenge is issued, so a
-  // resend shows the new code rather than the stale one.
   const demoOtp = useApiResource(
     (signal) => api.devLastOtp(phone, signal),
     [phone, challenge?.challengeId],
-    { enabled: DEMO_OTP_ENABLED && Boolean(phone) },
+    {
+      enabled: DEMO_OTP_ENABLED && Boolean(phone),
+    },
   );
 
-  // A refresh loses the router state, and the challenge exists nowhere else by
-  // design. Sending the farmer back to request a new code is the honest
-  // recovery; there is nothing to restore.
   if (!challenge) {
-    return <Navigate to={isStaff ? "/staff-login" : "/login"} replace state={{ notice: "otpSessionMissing" }} />;
+    return (
+      <Navigate
+        to={isStaff ? "/staff-login" : "/login"}
+        replace
+        state={{ notice: "otpSessionMissing" }}
+      />
+    );
   }
 
   function setDigit(index, value) {
@@ -111,10 +100,15 @@ function OTPVerification() {
   function handlePaste(event) {
     event.preventDefault();
 
-    const pasted = event.clipboardData.getData("text").replace(/\D/g, "").slice(0, OTP_LENGTH);
+    const pasted = event.clipboardData
+      .getData("text")
+      .replace(/\D/g, "")
+      .slice(0, OTP_LENGTH);
+
     if (!pasted) return;
 
     const next = Array(OTP_LENGTH).fill("");
+
     pasted.split("").forEach((digit, index) => {
       next[index] = digit;
     });
@@ -123,7 +117,9 @@ function OTPVerification() {
     setError(null);
     setLocalError(null);
 
-    inputRefs.current[Math.min(pasted.length, OTP_LENGTH - 1)]?.focus();
+    inputRefs.current[
+      Math.min(pasted.length, OTP_LENGTH - 1)
+    ]?.focus();
   }
 
   async function handleVerify() {
@@ -141,12 +137,11 @@ function OTPVerification() {
     try {
       await api.verifyOtp(challenge.challengeId, otp);
 
-      // The cookie now exists. Resolving the session from GET /me is what
-      // makes the app consider the user signed in — and it is also what tells
-      // us which portal they belong to, since the same OTP screen completes
-      // farmer, officer and admin sign-in alike.
       const profile = await onSignedIn();
-      navigate(homePathFor(profile), { replace: true });
+
+      navigate(homePathFor(profile), {
+        replace: true,
+      });
     } catch (verifyError) {
       setError(verifyError);
       setDigits(Array(OTP_LENGTH).fill(""));
@@ -166,8 +161,6 @@ function OTPVerification() {
     try {
       const next = await api.resendOtp(challenge.challengeId);
 
-      // A resend issues a new code and a new cooldown, but does NOT reset the
-      // attempt budget (authentication.md §2.5).
       setChallenge(next);
       setDigits(Array(OTP_LENGTH).fill(""));
       inputRefs.current[0]?.focus();
@@ -179,162 +172,239 @@ function OTPVerification() {
   }
 
   const expired = expiresIn <= 0;
-  const shownError = localError ?? (error ? translateError(t, error) : null);
+  const shownError =
+    localError ?? (error ? translateError(t, error) : null);
 
   return (
-    <div className="min-h-screen bg-green-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white rounded-3xl shadow-xl p-6 sm:p-8">
-        <div className="flex justify-end">
-          <LanguageToggle variant="onLight" />
-        </div>
-
-        <div className="flex justify-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-green-700 text-2xl shadow-sm">
-            🌾
-          </div>
-        </div>
-
-        <h1 className="mt-3 text-2xl font-bold text-green-800 text-center">{t("appName")}</h1>
-
-        <p className="text-center text-gray-500 mt-1 text-sm">{t("farmerProcurementPortal")}</p>
-
-        <div className="mt-8">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-xs font-semibold text-green-700 uppercase tracking-wide">
-              {t("stepOf", { current: 2, total: 2 })}
+    <div className="min-h-screen bg-[#f3f5f3] text-slate-900">
+      <header className="border-b border-emerald-700/20 bg-[#11a255] text-white">
+        <div className="mx-auto flex min-h-[72px] w-full max-w-[1280px] items-center justify-between px-4 sm:px-6 lg:px-8">
+          <button
+            type="button"
+            onClick={() => navigate("/")}
+            className="flex items-center gap-3 text-left"
+          >
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 text-xl">
+              🌾
             </span>
 
-            <span className="text-xs text-gray-400">{t("verificationStepLabel")}</span>
-          </div>
+            <span>
+              <span className="block text-lg font-extrabold tracking-tight">
+                FarmQueue
+              </span>
 
-          <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-            <div className="w-full h-full bg-green-700 rounded-full" />
+              <span className="hidden text-xs font-medium text-white/80 sm:block">
+                {t("farmerProcurementPortal")}
+              </span>
+            </span>
+          </button>
+
+          <div className="flex items-center gap-2 sm:gap-3">
+            <LanguageToggle variant="onGreen" />
+
+            <span className="hidden rounded-full border border-white/25 bg-white/10 px-4 py-2 text-xs font-semibold sm:block">
+              {t("secureVerification")}
+            </span>
           </div>
         </div>
+      </header>
 
-        <div className="text-center mt-8">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-50 text-xl">
-            📱
-          </div>
+      <main className="mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-[1280px] items-center justify-center px-4 py-8 sm:px-6 lg:px-8">
+        <section className="w-full max-w-[500px]">
+          <div className="rounded-[24px] border border-slate-200 bg-white px-5 py-7 shadow-[0_8px_30px_rgba(16,64,42,0.06)] sm:px-8 sm:py-9 lg:px-10 lg:py-10">
+            <div className="text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-2xl">
+                📱
+              </div>
 
-          <h2 className="text-xl font-semibold text-gray-900 mt-4">{t("verifyMobileNumber")}</h2>
+              <p className="mt-6 text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">
+                {t("verificationStepLabel")}
+              </p>
 
-          <p className="text-sm text-gray-500 mt-2">{t("otpSentTo")}</p>
+              <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
+                {t("verifyMobileNumber")}
+              </h1>
 
-          <p className="text-sm font-semibold text-gray-800 mt-1">{maskedPhone}</p>
-        </div>
+              <p className="mt-3 text-sm leading-6 text-slate-500">
+                {t("otpSentTo")}
+              </p>
 
-        <div className="flex justify-center gap-2 sm:gap-3 mt-7" onPaste={handlePaste}>
-          {digits.map((digit, index) => (
-            <input
-              // Positional inputs of fixed length; the index IS the identity.
-              key={index}
-              ref={(element) => {
-                inputRefs.current[index] = element;
-              }}
-              type="text"
-              value={digit}
-              maxLength={1}
-              inputMode="numeric"
+              <p className="mt-1 text-sm font-extrabold text-slate-800">
+                {maskedPhone}
+              </p>
+            </div>
+
+            <div className="mt-8">
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-[0.12em] text-emerald-700">
+                  {t("stepOf", { current: 2, total: 2 })}
+                </span>
+
+                <span className="text-xs font-medium text-slate-400">
+                  {t("verificationStepLabel")}
+                </span>
+              </div>
+
+              <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                <div className="h-full w-full rounded-full bg-[#11a255]" />
+              </div>
+            </div>
+
+            <div
+              className="mt-8 flex justify-center gap-2 sm:gap-3"
+              onPaste={handlePaste}
+            >
+              {digits.map((digit, index) => (
+                <input
+                  key={index}
+                  ref={(element) => {
+                    inputRefs.current[index] = element;
+                  }}
+                  type="text"
+                  value={digit}
+                  maxLength={1}
+                  inputMode="numeric"
+                  disabled={submitting || expired}
+                  aria-label={`${t("otpDigit")} ${index + 1}`}
+                  autoComplete={
+                    index === 0 ? "one-time-code" : "off"
+                  }
+                  onChange={(event) =>
+                    setDigit(index, event.target.value)
+                  }
+                  onKeyDown={(event) =>
+                    handleKeyDown(event, index)
+                  }
+                  className={`h-12 w-11 rounded-xl border bg-white text-center text-lg font-extrabold outline-none transition sm:h-14 sm:w-14 ${
+                    shownError
+                      ? "border-red-300 focus:border-red-500 focus:ring-4 focus:ring-red-50"
+                      : "border-slate-200 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-50"
+                  }`}
+                />
+              ))}
+            </div>
+
+            {shownError && (
+              <div className="mt-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-center">
+                <p className="text-xs font-semibold text-red-600">
+                  {shownError}
+                </p>
+              </div>
+            )}
+
+            {DEMO_OTP_ENABLED && demoOtp.data && (
+              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-center">
+                <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+                  {t("demoOtpLabel")}
+                </p>
+
+                <p className="mt-1 font-mono text-2xl font-bold tracking-[0.3em] text-amber-900">
+                  {demoOtp.data}
+                </p>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDigits(
+                      demoOtp.data
+                        .padEnd(OTP_LENGTH, "")
+                        .slice(0, OTP_LENGTH)
+                        .split(""),
+                    );
+                    setError(null);
+                    setLocalError(null);
+                  }}
+                  className="mt-2 text-xs font-semibold text-amber-800 underline"
+                >
+                  {t("demoOtpFill")}
+                </button>
+
+                <p className="mt-2 text-[11px] leading-4 text-amber-700">
+                  {t("demoOtpNote")}
+                </p>
+              </div>
+            )}
+
+            <p className="mt-3 text-center text-xs text-slate-400">
+              {expired
+                ? t("otpExpired")
+                : t("otpExpiresIn", {
+                    seconds: expiresIn,
+                  })}
+            </p>
+
+            {typeof challenge.attemptsRemaining === "number" && (
+              <p className="mt-1 text-center text-xs text-slate-400">
+                {t("attemptsRemaining", {
+                  count: challenge.attemptsRemaining,
+                })}
+              </p>
+            )}
+
+            <div className="mt-7 text-center">
+              <p className="text-sm text-slate-500">
+                {t("didntReceiveOtp")}
+              </p>
+
+              {resendIn > 0 ? (
+                <p className="mt-1 text-sm font-extrabold text-slate-400">
+                  {t("resendOtpIn", {
+                    seconds: resendIn,
+                  })}
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleResend}
+                  disabled={resending}
+                  className="mt-1 text-sm font-extrabold text-emerald-700 hover:underline disabled:text-slate-400"
+                >
+                  {resending
+                    ? t("sendingOtp")
+                    : t("resendOtp")}
+                </button>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={handleVerify}
               disabled={submitting || expired}
-              aria-label={`${t("otpDigit")} ${index + 1}`}
-              autoComplete={index === 0 ? "one-time-code" : "off"}
-              onChange={(event) => setDigit(index, event.target.value)}
-              onKeyDown={(event) => handleKeyDown(event, index)}
-              className={`w-11 h-12 sm:w-12 sm:h-13 text-center text-lg font-semibold border rounded-xl bg-gray-50 outline-none transition disabled:opacity-50 ${
-                shownError
-                  ? "border-red-300 focus:border-red-500 focus:ring-2 focus:ring-red-100"
-                  : "border-gray-200 focus:border-green-600 focus:ring-2 focus:ring-green-100"
-              }`}
-            />
-          ))}
-        </div>
-
-        {shownError && <p className="text-center text-xs text-red-600 mt-3">{shownError}</p>}
-
-        {/*
-          Demo mode only. No SMS provider is configured, so the code is shown
-          here instead of arriving on a phone. It is still submitted to
-          /auth/otp/verify like any other code — this reveals the OTP, it does
-          not skip verification.
-        */}
-        {DEMO_OTP_ENABLED && demoOtp.data && (
-          <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-center">
-            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
-              {t("demoOtpLabel")}
-            </p>
-
-            <p className="mt-1 font-mono text-2xl font-bold tracking-[0.3em] text-amber-900">
-              {demoOtp.data}
-            </p>
+              className="mt-6 flex min-h-14 w-full items-center justify-center rounded-xl bg-[#0b7f43] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-[#096b39] active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-emerald-300"
+            >
+              {submitting
+                ? t("verifying")
+                : `${t("verifyAndContinue")} →`}
+            </button>
 
             <button
               type="button"
-              onClick={() => {
-                setDigits(demoOtp.data.padEnd(OTP_LENGTH, "").slice(0, OTP_LENGTH).split(""));
-                setError(null);
-                setLocalError(null);
-              }}
-              className="mt-2 text-xs font-semibold text-amber-800 underline"
+              onClick={() =>
+                navigate(
+                  isStaff
+                    ? "/staff-login"
+                    : initial?.purpose === "register"
+                      ? "/"
+                      : "/login",
+                  { replace: true },
+                )
+              }
+              className="mt-3 flex min-h-12 w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-5 text-sm font-bold text-slate-500 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
             >
-              {t("demoOtpFill")}
+              ← {t("changeMobileNumber")}
             </button>
 
-            <p className="mt-2 text-[11px] leading-4 text-amber-700">{t("demoOtpNote")}</p>
+            <div className="mt-6 flex items-center justify-center gap-2 border-t border-slate-100 pt-5 text-xs font-medium text-slate-400">
+              <span>🔒</span>
+              <span>{t("secureVerification")}</span>
+            </div>
           </div>
-        )}
 
-        <p className="text-center text-xs text-gray-400 mt-3">
-          {expired ? t("otpExpired") : t("otpExpiresIn", { seconds: expiresIn })}
-        </p>
-
-        {typeof challenge.attemptsRemaining === "number" && (
-          <p className="text-center text-xs text-gray-400 mt-1">
-            {t("attemptsRemaining", { count: challenge.attemptsRemaining })}
+          <p className="mt-5 text-center text-xs font-medium text-slate-400">
+            {t("farmerProcurementPortal")}
           </p>
-        )}
-
-        <div className="text-center mt-6">
-          <p className="text-sm text-gray-500">{t("didntReceiveOtp")}</p>
-
-          {resendIn > 0 ? (
-            <p className="mt-1 text-sm font-semibold text-gray-400">
-              {t("resendOtpIn", { seconds: resendIn })}
-            </p>
-          ) : (
-            <button
-              type="button"
-              onClick={handleResend}
-              disabled={resending}
-              className="mt-1 text-sm font-semibold text-green-700 hover:underline disabled:text-gray-400"
-            >
-              {resending ? t("sendingOtp") : t("resendOtp")}
-            </button>
-          )}
-        </div>
-
-        <button
-          type="button"
-          onClick={handleVerify}
-          disabled={submitting || expired}
-          className="w-full bg-green-700 hover:bg-green-800 disabled:cursor-not-allowed disabled:bg-green-300 text-white font-semibold py-3.5 rounded-xl transition mt-6 shadow-sm"
-        >
-          {submitting ? t("verifying") : `${t("verifyAndContinue")} →`}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => navigate(isStaff ? "/staff-login" : initial?.purpose === "register" ? "/" : "/login", { replace: true })}
-          className="w-full text-sm text-gray-500 hover:text-green-700 mt-4"
-        >
-          ← {t("changeMobileNumber")}
-        </button>
-
-        <div className="mt-6 flex items-center justify-center gap-2 text-xs text-gray-400">
-          <span>🔒</span>
-          <span>{t("secureVerification")}</span>
-        </div>
-      </div>
+        </section>
+      </main>
     </div>
   );
 }

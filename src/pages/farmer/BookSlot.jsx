@@ -16,18 +16,6 @@ import {
 import FarmerLayout from "../../components/FarmerLayout";
 import { DataTypeNote, ErrorState, Loading, MandiNote } from "../../components/StateViews";
 
-/**
- * Slot booking.
- *
- * The prototype offered four fixed time slots with invented seat counts and
- * generated its own booking id. None of that survives contact with the real
- * engine, where capacity is *time on a lane* sized to the quantity, the
- * earliest fitting window is computed server-side, and both the booking code
- * and the token are minted by the server (bookings.md §3, §5.1).
- *
- * So the flow is: describe what you are bringing, ask the server what it can
- * offer, then take it or not. The client proposes nothing.
- */
 function BookSlot() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
@@ -46,18 +34,10 @@ function BookSlot() {
   const [fieldError, setFieldError] = useState(null);
 
   const cropBoxRef = useRef(null);
-
-  // One key per prepared booking. Reused across retries of the same request so
-  // a double submit replays the stored response instead of booking twice
-  // (bookings.md §5.2), and regenerated whenever the request changes.
   const idempotencyKey = useRef(newIdempotencyKey());
 
   const crops = useApiResource((signal) => api.crops(signal), []);
   const constraints = useApiResource((signal) => api.bookingConstraints(signal), []);
-
-  // Centres are filtered by crop on the server, which owns the eligibility
-  // rule. Matching crop names against a centre's accepted list in the browser
-  // would be a second, divergent copy of that rule.
   const centres = useApiResource(
     (signal) => api.centres({ cropId }, signal),
     [cropId],
@@ -77,8 +57,6 @@ function BookSlot() {
 
   const centreZone = selectedCentre?.timezone ?? "Asia/Kolkata";
   const minDate = todayInZone(centreZone);
-
-  // Closes the crop dropdown on an outside click.
   useEffect(() => {
     if (!cropListOpen) return undefined;
 
@@ -92,7 +70,6 @@ function BookSlot() {
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [cropListOpen]);
 
-  /** Any change to the request invalidates the offer it produced. */
   function invalidateOffer() {
     setOffer(null);
     setError(null);
@@ -166,15 +143,9 @@ function BookSlot() {
         },
         idempotencyKey.current,
       );
-
-      // The confirmation screen renders the server's response. Nothing about
-      // this booking is reconstructed client-side.
       navigate("/booking-confirmation", { replace: true, state: { booking: created } });
     } catch (bookError) {
       setError(bookError);
-
-      // The window was taken mid-flight; the offer is stale, so the farmer must
-      // ask again rather than retry against a window that no longer exists.
       if (bookError?.code === "SLOT_NO_LONGER_AVAILABLE") {
         setOffer(null);
         idempotencyKey.current = newIdempotencyKey();
@@ -209,7 +180,7 @@ function BookSlot() {
 
       {!crops.initialLoading && (
         <form onSubmit={handleCheckAvailability} className="space-y-4">
-          {/* Crop ------------------------------------------------------- */}
+          {}
           <section className={card}>
             <div className="mb-4 flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-50 text-lg">
@@ -268,8 +239,7 @@ function BookSlot() {
                         crop.id === cropId ? "bg-green-50 font-semibold" : ""
                       }`}
                     >
-                      {/* canonicalName is the government's own wording and is
-                          deliberately never translated (farmer.md §7). */}
+                      {}
                       <span className="text-slate-800">{crop.canonicalName}</span>
 
                       <span className="ml-2 shrink-0 text-xs text-slate-400">
@@ -282,7 +252,7 @@ function BookSlot() {
             </div>
           </section>
 
-          {/* Centre ----------------------------------------------------- */}
+          {}
           <section className={card}>
             <div className="mb-4 flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-50 text-lg">
@@ -333,7 +303,7 @@ function BookSlot() {
             {selectedCentre && <DataTypeNote dataType={selectedCentre.dataType} />}
           </section>
 
-          {/* Quantity --------------------------------------------------- */}
+          {}
           <section className={card}>
             <div className="mb-4 flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-50 text-lg">
@@ -366,8 +336,7 @@ function BookSlot() {
               <span className="shrink-0 text-sm font-medium text-slate-500">{t("quintal")}</span>
             </div>
 
-            {/* The range comes from the server and is also a database CHECK;
-                hardcoding it here would let the two disagree (farmer.md §9). */}
+            {}
             <p className="mt-2 text-xs text-slate-400">
               {quantity
                 ? t("quantityRange", { min: quantity.minQuintal, max: quantity.maxQuintal })
@@ -375,7 +344,7 @@ function BookSlot() {
             </p>
           </section>
 
-          {/* Date ------------------------------------------------------- */}
+          {}
           <section className={card}>
             <div className="mb-4 flex items-center gap-3">
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-50 text-lg">
@@ -414,7 +383,7 @@ function BookSlot() {
         </form>
       )}
 
-      {/* Offer -------------------------------------------------------- */}
+      {}
       {offer && !offer.available && (
         <section className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
           <h3 className="font-semibold text-amber-900">{t("noAvailabilityTitle")}</h3>
@@ -467,8 +436,7 @@ function BookSlot() {
             </div>
           </div>
 
-          {/* Storage headroom is never invented; the server returns a reason
-              code instead of a number (bookings.md §5.4). */}
+          {}
           {offer.storageCheck?.status === "NOT_AVAILABLE" && (
             <p className="px-4 pb-2 text-xs text-slate-400">
               {translateReason(t, offer.storageCheck.reasonCode)}
