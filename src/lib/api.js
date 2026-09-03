@@ -174,6 +174,14 @@ async function write(method, path, options = {}) {
   }
 }
 
+/** One officer lifecycle transition. All share a shape, so they share a helper. */
+function officerAction(bookingCode, action, body, signal) {
+  return write("POST", `/officer/bookings/${encodeURIComponent(bookingCode)}/${action}`, {
+    body: body ?? {},
+    signal,
+  });
+}
+
 /** Idempotency-Key is required on POST /bookings (bookings.md §5). */
 export function newIdempotencyKey() {
   if (globalThis.crypto?.randomUUID) {
@@ -266,6 +274,72 @@ export const api = {
 
   markAllNotificationsRead: (signal) => write("POST", "/notifications/read-all", { signal }),
 
+  // -- staff (officer / admin) ---------------------------------------------
+  //
+  // Password alone creates NO session. It returns an OTP challenge, which is
+  // then verified through the same POST /auth/otp/verify a farmer uses
+  // (authentication.md §2.3).
+  staffLogin: (username, password, signal) =>
+    write("POST", "/auth/staff/login", { body: { username, password }, signal }),
+
+  officerCentres: (signal) => request("GET", "/officer/centres", { signal }),
+
+  /** `date` defaults to today in the CENTRE's timezone, never the browser's. */
+  centreBookings: (centreId, { date, status } = {}, signal) =>
+    request("GET", `/officer/centres/${encodeURIComponent(centreId)}/bookings`, {
+      query: { date, status },
+      signal,
+    }),
+
+  centreQueue: (centreId, { date } = {}, signal) =>
+    request("GET", `/officer/centres/${encodeURIComponent(centreId)}/queue`, {
+      query: { date },
+      signal,
+    }),
+
+  officerSearch: (query, signal) =>
+    request("GET", "/officer/bookings/search", { query: { q: query }, signal }),
+
+  officerBooking: (bookingCode, signal) =>
+    request("GET", `/officer/bookings/${encodeURIComponent(bookingCode)}`, { signal }),
+
+  /**
+   * Lifecycle transitions.
+   *
+   * None takes an Idempotency-Key and none needs one: a replayed `arrive`
+   * finds the booking already ARRIVED and returns 409, which is the correct
+   * answer to a double tap rather than a failure to handle one
+   * (officer.md §1).
+   */
+  officerArrive: (bookingCode, signal) => officerAction(bookingCode, "arrive", undefined, signal),
+
+  officerNoShow: (bookingCode, signal) => officerAction(bookingCode, "no-show", undefined, signal),
+
+  officerStartWeighing: (bookingCode, signal) =>
+    officerAction(bookingCode, "weighing", undefined, signal),
+
+  officerRecordWeight: (bookingCode, grossQuantityKg, signal) =>
+    officerAction(bookingCode, "weight", { grossQuantityKg }, signal),
+
+  /** `qualityStatus` is derived server-side and is not in the request schema. */
+  officerRecordQuality: (bookingCode, quality, signal) =>
+    officerAction(bookingCode, "quality", quality, signal),
+
+  officerComplete: (bookingCode, signal) =>
+    officerAction(bookingCode, "complete", undefined, signal),
+
+  officerCancel: (bookingCode, reason, signal) =>
+    officerAction(bookingCode, "cancel", reason ? { reason } : {}, signal),
+
+  officerSetPaymentStatus: (bookingCode, status, paymentReference, signal) =>
+    officerAction(
+      bookingCode,
+      "payment",
+      paymentReference ? { status, paymentReference } : { status },
+      signal,
+    ),
+
+  // -- notifications -------------------------------------------------------
   notificationPreferences: (signal) => request("GET", "/notifications/preferences", { signal }),
 
   /**

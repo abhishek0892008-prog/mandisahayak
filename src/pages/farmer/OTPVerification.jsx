@@ -6,6 +6,7 @@ import api, { DEMO_OTP_ENABLED } from "../../lib/api";
 import { useAuth } from "../../auth/context";
 import { translateError } from "../../lib/codes";
 import useApiResource from "../../hooks/useApiResource";
+import { homePathFor } from "../../auth/roles";
 import LanguageToggle from "../../components/LanguageToggle";
 
 const OTP_LENGTH = 6;
@@ -60,11 +61,14 @@ function OTPVerification() {
   const resendIn = secondsUntil(challenge?.resendAvailableAt, now);
 
   const phone = initial?.phone ?? "";
+  const isStaff = initial?.purpose === "staff";
 
   const maskedPhone = useMemo(() => {
+    // Staff sign in by employee code; there is no phone in that challenge.
+    if (isStaff) return initial?.username ?? "";
     if (!phone) return "+91 XXXXX XXXXX";
     return `+91 ${phone.slice(0, 2)}XXXXXX${phone.slice(-2)}`;
-  }, [phone]);
+  }, [phone, isStaff, initial?.username]);
 
   // Demo mode only. Re-requested whenever a new challenge is issued, so a
   // resend shows the new code rather than the stale one.
@@ -78,7 +82,7 @@ function OTPVerification() {
   // design. Sending the farmer back to request a new code is the honest
   // recovery; there is nothing to restore.
   if (!challenge) {
-    return <Navigate to="/login" replace state={{ notice: "otpSessionMissing" }} />;
+    return <Navigate to={isStaff ? "/staff-login" : "/login"} replace state={{ notice: "otpSessionMissing" }} />;
   }
 
   function setDigit(index, value) {
@@ -138,9 +142,11 @@ function OTPVerification() {
       await api.verifyOtp(challenge.challengeId, otp);
 
       // The cookie now exists. Resolving the session from GET /me is what
-      // makes the app consider the farmer signed in.
-      await onSignedIn();
-      navigate("/dashboard", { replace: true });
+      // makes the app consider the user signed in — and it is also what tells
+      // us which portal they belong to, since the same OTP screen completes
+      // farmer, officer and admin sign-in alike.
+      const profile = await onSignedIn();
+      navigate(homePathFor(profile), { replace: true });
     } catch (verifyError) {
       setError(verifyError);
       setDigits(Array(OTP_LENGTH).fill(""));
@@ -318,7 +324,7 @@ function OTPVerification() {
 
         <button
           type="button"
-          onClick={() => navigate(initial?.purpose === "register" ? "/" : "/login", { replace: true })}
+          onClick={() => navigate(isStaff ? "/staff-login" : initial?.purpose === "register" ? "/" : "/login", { replace: true })}
           className="w-full text-sm text-gray-500 hover:text-green-700 mt-4"
         >
           ← {t("changeMobileNumber")}

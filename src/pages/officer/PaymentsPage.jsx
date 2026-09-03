@@ -1,229 +1,232 @@
-import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
-const paymentStatusButtons = ["Pending", "Processing", "Cleared"];
+import api from "../../lib/api";
+import useApiResource from "../../hooks/useApiResource";
+import useOfficerCentre from "../../hooks/useOfficerCentre";
+import { translateDisplayStatus, translatePaymentStatus } from "../../lib/codes";
+import { formatDate, todayInZone } from "../../lib/format";
+import OfficerLayout from "../../components/OfficerLayout";
+import CentrePicker from "../../components/CentrePicker";
+import { EmptyState, ErrorState, Loading, StatusBadge } from "../../components/StateViews";
 
-const PaymentsPage = ({
-  farmers = [],
-  onPaymentStatusChange,
-  selectedDate,
-}) => {
-  const navigate = useNavigate();
-  const [expandedId, setExpandedId] = useState(null);
+/**
+ * Payment status.
+ *
+ * The transitions are a state machine the server enforces (officer.md §5.4),
+ * so the UI offers only the moves that are legal from the current status
+ * rather than a free dropdown that would collect a 409.
+ *
+ * `PAID` requires a reference, and only `PAID` closes the booking — FAILED and
+ * ON_HOLD leave it PAYMENT_PENDING, because the work is not finished. A
+ * BLOCKED payment has no outgoing edge at all: unblocking needs an MSP import
+ * or a grade correction, which are administrative acts.
+ *
+ * FarmQueue records status. It does not move money.
+ */
+const NEXT_STATUSES = {
+  PENDING: ["INITIATED", "ON_HOLD", "FAILED"],
+  INITIATED: ["PAID", "FAILED", "ON_HOLD"],
+  ON_HOLD: ["PENDING", "INITIATED", "FAILED"],
+  FAILED: ["PENDING", "INITIATED"],
+  PAID: [],
+  BLOCKED: [],
+};
 
-  const activePayments = useMemo(
-    () =>
-      farmers
-        .filter(
-          (farmer) =>
-            (farmer.paidAmount ||
-              farmer.paymentStatus ||
-              farmer.status === "Cleared") &&
-            farmer.paymentStatus !== "Cleared" &&
-            farmer.status !== "Cleared",
-        )
-        .sort(
-          (a, b) =>
-            (a.date || "").localeCompare(b.date || "") ||
-            Number(a.id) - Number(b.id),
-        ),
-    [farmers],
+function PaymentsPage() {
+  const { t, i18n } = useTranslation();
+
+  const centre = useOfficerCentre();
+  const [date, setDate] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const [error, setError] = useState(null);
+  const [reference, setReference] = useState({});
+
+  const effectiveDate = date ?? todayInZone(centre.timezone);
+
+  const bookings = useApiResource(
+    (signal) =>
+      api.centreBookings(
+        centre.centreId,
+        { date: effectiveDate, status: "PAYMENT_PENDING,COMPLETED" },
+        signal,
+      ),
+    [centre.centreId, effectiveDate],
+    { enabled: Boolean(centre.centreId) },
   );
 
-  const clearedPayments = useMemo(
-    () =>
-      farmers
-        .filter(
-          (farmer) =>
-            farmer.paymentStatus === "Cleared" || farmer.status === "Cleared",
-        )
-        .sort(
-          (a, b) =>
-            (a.date || "").localeCompare(b.date || "") ||
-            Number(a.id) - Number(b.id),
-        ),
-    [farmers],
-  );
+  const rows = bookings.data ?? [];
+  const locale = i18n.language;
 
-  const getPriceBreakdown = (entry) => {
-    const cropRateMap = {
-      Wheat: 2275,
-      Rice: 2225,
-      Mustard: 5650,
-      Gram: 5230,
-    };
+  async function setStatus(bookingCode, status) {
+    setBusy(`${bookingCode}:${status}`);
+    setError(null);
 
-    const actualWeight = Number(entry.actualWeight || entry.quantity || 0);
-    const rate = Number(entry.mspRate ?? cropRateMap[entry.crop] ?? 0);
-    const payable = actualWeight * rate;
-
-    return {
-      actualWeight,
-      rate,
-      payable,
-    };
-  };
-
-  const handlePaymentStatusChange = (id, status) => {
-    onPaymentStatusChange?.(id, status);
-
-    if (status === "Cleared") {
-      navigate("/reports");
+    try {
+      await api.officerSetPaymentStatus(bookingCode, status, reference[bookingCode]?.trim() || undefined);
+      bookings.reload();
+    } catch (updateError) {
+      setError(updateError);
+    } finally {
+      setBusy(null);
     }
-  };
+  }
 
   return (
-    <div className="rounded-3xl border border-emerald-200 bg-white p-4 shadow-sm shadow-emerald-200/30 sm:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <OfficerLayout
+      title={t("payments")}
+      subtitle={centre.centre?.name ?? t("procurementCentre")}
+      stats={[
+        { label: t("awaitingPayment"), value: rows.filter((r) => r.status === "PAYMENT_PENDING").length },
+        { label: t("completedToday"), value: rows.filter((r) => r.status === "COMPLETED").length },
+      ]}
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          <CentrePicker centre={centre} />
+
+          <input
+            type="date"
+            value={effectiveDate}
+            onChange={(event) => setDate(event.target.value)}
+            className="rounded-full border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-emerald-600"
+          />
+        </div>
+      }
+    >
+      {error && <ErrorState error={error} className="mb-4" />}
+
+      {bookings.error && <ErrorState error={bookings.error} onRetry={bookings.reload} />}
+
+      {(centre.loading || bookings.initialLoading) && <Loading />}
+
+      {!bookings.initialLoading && rows.length === 0 && !bookings.error && (
+        <EmptyState icon="💳" title={t("noPaymentsToday")} description={t("noPaymentsTodayNote")} />
+      )}
+
+      <div className="space-y-4">
+        {rows.map((row) => (
+          <PaymentRow
+            key={row.bookingCode}
+            row={row}
+            locale={locale}
+            timezone={centre.timezone}
+            busy={busy}
+            reference={reference[row.bookingCode] ?? ""}
+            onReference={(value) =>
+              setReference((current) => ({ ...current, [row.bookingCode]: value }))
+            }
+            onSetStatus={setStatus}
+          />
+        ))}
+      </div>
+
+      <p className="mt-6 rounded-xl bg-slate-100 p-3 text-xs leading-4 text-slate-500">
+        ℹ️ {t("noDisbursalNote")}
+      </p>
+    </OfficerLayout>
+  );
+}
+
+/** One booking's payment, with its own fetch so a row refreshes independently. */
+function PaymentRow({ row, locale, timezone, busy, reference, onReference, onSetStatus }) {
+  const { t } = useTranslation();
+
+  const detail = useApiResource(
+    (signal) => api.payment(row.bookingCode, signal),
+    [row.bookingCode],
+  );
+
+  const payment = detail.data?.payment ?? null;
+  const options = payment ? (NEXT_STATUSES[payment.status] ?? []) : [];
+  const needsReference = options.includes("PAID");
+
+  return (
+    <article className="rounded-[26px] border border-emerald-100 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 sm:text-2xl">
-            Payments overview
-          </h2>
-          <p className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
-            {selectedDate ?? "Today"}
+          <p className="font-mono text-xs text-slate-500">{row.bookingCode}</p>
+
+          <h3 className="text-lg font-black text-slate-900">
+            {t("tokenNumberLabel")} {row.tokenNumber} · {row.crop?.name}
+          </h3>
+
+          <p className="mt-1 text-xs text-slate-500">
+            {formatDate(row.serviceDate, timezone, locale)}
           </p>
         </div>
-        <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-emerald-800">
-          {activePayments.length} settlement
-          {activePayments.length === 1 ? "" : "s"}
-        </span>
-      </div>
 
-      <div className="mt-6 space-y-3">
-        {activePayments.length === 0 ? (
-          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-slate-700">
-            No payment entries yet for this date.
-          </div>
-        ) : (
-          activePayments.map((entry) => {
-            const { actualWeight, rate, payable } = getPriceBreakdown(entry);
-            const isExpanded = expandedId === entry.id;
+        <div className="flex items-center gap-2">
+          <StatusBadge status={row.status} label={translateDisplayStatus(t, row.displayStatus)} />
 
-            return (
-              <div
-                key={`${entry.date || selectedDate}-${entry.id}`}
-                className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4"
-              >
-                <button
-                  type="button"
-                  onClick={() =>
-                    setExpandedId((current) =>
-                      current === entry.id ? null : entry.id,
-                    )
-                  }
-                  className="flex w-full items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-white px-3 py-3 text-left"
-                >
-                  <div>
-                    <p className="text-lg font-bold text-slate-900">
-                      {entry.name}
-                    </p>
-                    <p className="text-sm text-slate-600">
-                      {entry.date || selectedDate} • {entry.crop} • {entry.slot}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <span className="text-lg font-bold text-slate-900">
-                      ₹
-                      {Number(entry.paidAmount || payable || 0).toLocaleString(
-                        "en-IN",
-                      )}
-                    </span>
-                    <span className="text-lg text-emerald-700">
-                      {isExpanded ? "▴" : "▾"}
-                    </span>
-                  </div>
-                </button>
-
-                {isExpanded && (
-                  <div className="mt-4 rounded-2xl border border-emerald-200 bg-white p-4">
-                    <div className="grid gap-3 sm:grid-cols-3">
-                      <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-700">
-                          Actual weight
-                        </p>
-                        <p className="mt-1 font-bold text-slate-900">
-                          {actualWeight} kg
-                        </p>
-                      </div>
-                      <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-700">
-                          MSP rate
-                        </p>
-                        <p className="mt-1 font-bold text-slate-900">
-                          ₹{rate.toLocaleString("en-IN")}
-                        </p>
-                      </div>
-                      <div className="rounded-xl border border-emerald-100 bg-emerald-50 p-3">
-                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-700">
-                          Payable amount
-                        </p>
-                        <p className="mt-1 font-bold text-slate-900">
-                          ₹{payable.toLocaleString("en-IN")}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
-                      {paymentStatusButtons.map((status) => {
-                        const isActive =
-                          (entry.paymentStatus ?? "Pending") === status;
-
-                        return (
-                          <button
-                            key={status}
-                            type="button"
-                            onClick={() =>
-                              handlePaymentStatusChange(entry.id, status)
-                            }
-                            className={[
-                              "min-w-27.5 rounded-full border px-5 py-2.5 text-sm font-semibold transition",
-                              isActive
-                                ? "border-green-700 bg-green-700 text-white"
-                                : "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100",
-                            ].join(" ")}
-                          >
-                            {status}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      {clearedPayments.length > 0 && (
-        <div className="mt-8 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
-          <h3 className="text-sm font-bold uppercase tracking-[0.16em] text-emerald-800">
-            Cleared payments
-          </h3>
-          <div className="mt-3 space-y-2">
-            {clearedPayments.map((entry) => (
-              <div
-                key={`cleared-${entry.date || selectedDate}-${entry.id}`}
-                className="flex items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-white px-3 py-2"
-              >
-                <div>
-                  <p className="font-bold text-slate-900">{entry.name}</p>
-                  <p className="text-xs text-slate-600">
-                    {entry.crop} • ₹
-                    {Number(entry.paidAmount || 0).toLocaleString("en-IN")}
-                  </p>
-                </div>
-                <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-emerald-800">
-                  Cleared
-                </span>
-              </div>
-            ))}
-          </div>
+          {payment && (
+            <StatusBadge
+              status={payment.status}
+              label={translatePaymentStatus(t, payment.status)}
+            />
+          )}
         </div>
+      </div>
+
+      {detail.initialLoading && <Loading />}
+
+      {payment && (
+        <>
+          <p className="mt-3 text-2xl font-black text-slate-900">
+            {payment.amountRupees
+              ? new Intl.NumberFormat(locale === "hi" ? "hi-IN" : "en-IN", {
+                  style: "currency",
+                  currency: "INR",
+                }).format(Number(payment.amountRupees))
+              : "—"}
+          </p>
+
+          {payment.paymentReference && (
+            <p className="mt-1 text-xs text-slate-500">
+              {t("paymentReference")}: {payment.paymentReference}
+            </p>
+          )}
+
+          {needsReference && (
+            <input
+              type="text"
+              value={reference}
+              onChange={(event) => onReference(event.target.value)}
+              placeholder={t("paymentReferencePlaceholder")}
+              aria-label={t("paymentReference")}
+              className="mt-3 w-full max-w-sm rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm outline-none focus:border-emerald-600"
+            />
+          )}
+
+          {options.length > 0 ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {options.map((status) => (
+                <button
+                  key={status}
+                  type="button"
+                  disabled={
+                    busy === `${row.bookingCode}:${status}` ||
+                    (status === "PAID" && !reference.trim())
+                  }
+                  onClick={() => onSetStatus(row.bookingCode, status)}
+                  className={`rounded-full px-4 py-2 text-sm font-semibold transition disabled:opacity-40 ${
+                    status === "PAID"
+                      ? "bg-emerald-700 text-white hover:bg-emerald-800"
+                      : "border border-emerald-200 text-emerald-800 hover:bg-emerald-50"
+                  }`}
+                >
+                  {translatePaymentStatus(t, status)}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 text-xs text-slate-500">
+              {payment.status === "BLOCKED" ? t("paymentBlockedNoAction") : t("paymentFinal")}
+            </p>
+          )}
+        </>
       )}
-    </div>
+    </article>
   );
-};
+}
 
 export default PaymentsPage;

@@ -1,442 +1,171 @@
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
 
-const ReportsPage = ({
-  farmers = [],
-  selectedDate,
-  selectedFarmerId = null,
-}) => {
-  const clearedFarmers = useMemo(
-    () =>
-      farmers
-        .filter(
-          (farmer) =>
-            farmer.status === "Cleared" || farmer.paymentStatus === "Cleared",
-        )
-        .sort(
-          (a, b) =>
-            (a.date || "").localeCompare(b.date || "") ||
-            Number(b.id) - Number(a.id),
-        ),
-    [farmers],
+import api from "../../lib/api";
+import useApiResource from "../../hooks/useApiResource";
+import useOfficerCentre from "../../hooks/useOfficerCentre";
+import { translateDisplayStatus } from "../../lib/codes";
+import { formatDate, formatQuantity, kgToQuintal, todayInZone } from "../../lib/format";
+import OfficerLayout from "../../components/OfficerLayout";
+import CentrePicker from "../../components/CentrePicker";
+import { EmptyState, ErrorState, Loading, StatusBadge } from "../../components/StateViews";
+
+/**
+ * The day's record.
+ *
+ * Deliberately a read, and deliberately narrow. `GET /admin/reports/:reportKey`
+ * exists for real reporting and belongs to the admin portal; an officer's
+ * question is "what happened at my centre today", which the bookings list
+ * already answers.
+ *
+ * Every total here is counted from rows the server returned. Nothing is
+ * accumulated in local state across sessions, which is what made the
+ * prototype's totals drift.
+ */
+function ReportsPage() {
+  const { t, i18n } = useTranslation();
+
+  const centre = useOfficerCentre();
+  const [date, setDate] = useState(null);
+
+  const effectiveDate = date ?? todayInZone(centre.timezone);
+
+  const bookings = useApiResource(
+    (signal) => api.centreBookings(centre.centreId, { date: effectiveDate }, signal),
+    [centre.centreId, effectiveDate],
+    { enabled: Boolean(centre.centreId) },
   );
 
-  const [activeFarmerId, setActiveFarmerId] = useState(selectedFarmerId);
+  const rows = bookings.data ?? [];
+  const locale = i18n.language;
 
-  useEffect(() => {
-    setActiveFarmerId(selectedFarmerId);
-  }, [selectedFarmerId]);
+  const completed = rows.filter((row) => ["COMPLETED", "PAYMENT_PENDING"].includes(row.status));
+  const noShows = rows.filter((row) => row.status === "NO_SHOW");
+  const cancelled = rows.filter((row) => row.status === "CANCELLED");
 
-  const selectedFarmer = useMemo(() => {
-    if (!clearedFarmers.length) return null;
-    const chosenId = activeFarmerId ?? selectedFarmerId ?? clearedFarmers[0].id;
-    return (
-      clearedFarmers.find((farmer) => farmer.id === chosenId) ??
-      clearedFarmers[0]
-    );
-  }, [activeFarmerId, clearedFarmers, selectedFarmerId]);
+  const declaredKg = rows.reduce((total, row) => total + Number(row.quantityKg ?? 0), 0);
 
-  const [form, setForm] = useState({
-    name: "",
-    token: "",
-    crop: "",
-    quantity: "",
-    slot: "",
-    actualWeight: "",
-    money: "",
-    paymentStatus: "Pending",
-  });
-
-  useEffect(() => {
-    if (!selectedFarmer) return;
-
-    setForm({
-      name: selectedFarmer.name ?? "",
-      token: selectedFarmer.token ?? "",
-      crop: selectedFarmer.crop ?? "",
-      quantity: selectedFarmer.quantity ?? "",
-      slot: selectedFarmer.slot ?? "",
-      actualWeight: selectedFarmer.actualWeight ?? "",
-      money: selectedFarmer.paidAmount ?? "",
-      paymentStatus: selectedFarmer.paymentStatus ?? "Pending",
-    });
-  }, [selectedFarmer]);
-
-  const navigate = useNavigate();
-  const [savedSummary, setSavedSummary] = useState(null);
-
-  useEffect(() => {
-    if (!selectedFarmer || selectedFarmerId == null) return;
-
-    if (
-      selectedFarmer.status === "Cleared" ||
-      selectedFarmer.paymentStatus === "Cleared"
-    ) {
-      setSavedSummary({
-        name: selectedFarmer.name,
-        token: selectedFarmer.token,
-        crop: selectedFarmer.crop,
-        actualWeight:
-          selectedFarmer.actualWeight || selectedFarmer.quantity || "0",
-        money: selectedFarmer.paidAmount || "0",
-        paymentStatus: selectedFarmer.paymentStatus || "Cleared",
-      });
-    }
-  }, [selectedFarmer, selectedFarmerId]);
-
-  const cropTotals = useMemo(() => {
-    const summary = {};
-
-    clearedFarmers.forEach((farmer) => {
-      const cropName = farmer.crop || "Other";
-      const quantity = Number(farmer.actualWeight || farmer.quantity || 0);
-      const amount = Number(farmer.paidAmount || 0);
-
-      if (!summary[cropName]) {
-        summary[cropName] = {
-          crop: cropName,
-          totalQuantity: 0,
-          totalAmount: 0,
-          farmers: 0,
-        };
-      }
-
-      summary[cropName].totalQuantity += quantity;
-      summary[cropName].totalAmount += amount;
-      summary[cropName].farmers += 1;
-    });
-
-    return Object.values(summary).sort((a, b) => b.totalAmount - a.totalAmount);
-  }, [clearedFarmers]);
-
-  const totalQuantity = cropTotals.reduce(
-    (sum, crop) => sum + Number(crop.totalQuantity || 0),
-    0,
-  );
-  const totalAmount = cropTotals.reduce(
-    (sum, crop) => sum + Number(crop.totalAmount || 0),
-    0,
-  );
-
-  const reports = [
-    {
-      title: "Daily collection",
-      value: `${clearedFarmers.length || 0} slots cleared`,
-      detail: "Today’s cleared queue",
-    },
-    {
-      title: "Farmers served",
-      value: String(clearedFarmers.length || 0),
-      detail: "Across active procurement",
-    },
-    {
-      title: "Net due",
-      value: `₹${totalAmount.toLocaleString("en-IN")}`,
-      detail: "Payments entered today",
-    },
-  ];
+  const byCrop = rows.reduce((map, row) => {
+    const name = row.crop?.name ?? "—";
+    map[name] = (map[name] ?? 0) + Number(row.quantityKg ?? 0);
+    return map;
+  }, {});
 
   return (
-    <>
-      {savedSummary && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 p-4">
-          <div className="w-full max-w-md rounded-[28px] border border-emerald-200 bg-white p-6 shadow-[0_20px_60px_rgba(15,23,42,0.2)]">
-            <div className="flex items-center justify-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-2xl text-emerald-700">
-                ✓
-              </div>
-            </div>
+    <OfficerLayout
+      title={t("reports")}
+      subtitle={centre.centre?.name ?? t("procurementCentre")}
+      stats={[
+        { label: t("expected"), value: rows.length },
+        { label: t("completedToday"), value: completed.length },
+        { label: t("notAttended"), value: noShows.length },
+        { label: t("cancelled"), value: cancelled.length },
+      ]}
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          <CentrePicker centre={centre} />
 
-            <h3 className="mt-4 text-center text-2xl font-black text-slate-900">
-              Report saved
-            </h3>
-
-            <div className="mt-4 space-y-2 rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-slate-700">
-              <div className="flex items-center justify-between gap-3">
-                <span className="font-semibold">Farmer</span>
-                <span className="text-right font-bold text-slate-900">
-                  {savedSummary.name}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="font-semibold">Token</span>
-                <span className="text-right font-bold text-slate-900">
-                  {savedSummary.token}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="font-semibold">Crop</span>
-                <span className="text-right font-bold text-slate-900">
-                  {savedSummary.crop}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="font-semibold">Actual weight</span>
-                <span className="text-right font-bold text-slate-900">
-                  {savedSummary.actualWeight} kg
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="font-semibold">Amount</span>
-                <span className="text-right font-bold text-slate-900">
-                  ₹{Number(savedSummary.money || 0).toLocaleString("en-IN")}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="font-semibold">Status</span>
-                <span className="text-right font-bold text-emerald-700">
-                  {savedSummary.paymentStatus}
-                </span>
-              </div>
-            </div>
-
-            <div className="mt-4 flex justify-end">
-              <button
-                type="button"
-                aria-label="Close report summary"
-                onClick={() => setSavedSummary(null)}
-                className="flex h-9 w-9 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-xl font-bold text-emerald-800 hover:bg-emerald-100"
-              >
-                ×
-              </button>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setSavedSummary(null);
-                navigate("/reports");
-              }}
-              className="mt-3 w-full rounded-full bg-green-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-green-800"
-            >
-              OK
-            </button>
-          </div>
+          <input
+            type="date"
+            value={effectiveDate}
+            onChange={(event) => setDate(event.target.value)}
+            className="rounded-full border border-emerald-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 outline-none focus:border-emerald-600"
+          />
         </div>
+      }
+    >
+      {bookings.error && <ErrorState error={bookings.error} onRetry={bookings.reload} />}
+
+      {(centre.loading || bookings.initialLoading) && <Loading />}
+
+      {!bookings.initialLoading && rows.length === 0 && !bookings.error && (
+        <EmptyState icon="📊" title={t("noBookingsToday")} description={t("noBookingsTodayNote")} />
       )}
 
-      <div className="space-y-5 rounded-3xl border border-emerald-200 bg-white p-4 shadow-sm shadow-emerald-200/30 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">
-              Cleared slot
-            </p>
-            <h2 className="text-xl font-bold text-slate-900 sm:text-2xl">
-              Operational reports
-            </h2>
-            <p className="mt-1 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
-              {selectedDate ?? "Today"}
-            </p>
-          </div>
-          <button className="rounded-full border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-900 hover:bg-emerald-100">
-            Export PDF
-          </button>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-3">
-          {reports.map((report) => (
-            <div
-              key={report.title}
-              className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5"
-            >
-              <p className="text-sm font-medium text-emerald-800">
-                {report.title}
+      {rows.length > 0 && (
+        <>
+          <div className="mb-5 grid gap-4 sm:grid-cols-2">
+            <div className="rounded-2xl border border-emerald-100 bg-white p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800/80">
+                {t("declaredTotal")}
               </p>
-              <h3 className="mt-2 text-3xl font-black text-slate-900">
-                {report.value}
-              </h3>
-              <p className="mt-2 text-sm text-slate-600">{report.detail}</p>
-            </div>
-          ))}
-        </div>
 
-        <div className="rounded-[26px] border border-emerald-200 bg-white p-4 shadow-sm shadow-emerald-200/30">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <h3 className="text-xl font-black text-slate-900">
-              Today’s report
-            </h3>
-            <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold uppercase tracking-[0.12em] text-emerald-800">
-              {totalQuantity} kg total
-            </span>
+              <p className="mt-2 text-3xl font-black text-slate-900">
+                {formatQuantity(kgToQuintal(declaredKg), locale)}{" "}
+                <span className="text-base font-semibold text-slate-500">{t("quintal")}</span>
+              </p>
+
+              {/* Declared, not procured: the accepted figure is per booking and
+                  only exists once quality has been recorded. */}
+              <p className="mt-1 text-xs text-slate-400">{t("declaredTotalNote")}</p>
+            </div>
+
+            <div className="rounded-2xl border border-emerald-100 bg-white p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800/80">
+                {t("byCrop")}
+              </p>
+
+              <ul className="mt-2 space-y-1">
+                {Object.entries(byCrop).map(([crop, kg]) => (
+                  <li key={crop} className="flex justify-between text-sm">
+                    <span className="text-slate-700">{crop}</span>
+
+                    <span className="font-semibold text-slate-900">
+                      {formatQuantity(kgToQuintal(kg), locale)} {t("quintal")}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
 
-          <div className="overflow-hidden rounded-2xl border border-emerald-200">
-            <table className="min-w-full divide-y divide-emerald-200 text-left text-sm">
-              <thead className="bg-emerald-50 text-emerald-900">
-                <tr>
-                  <th className="px-3 py-2 font-bold">Crop</th>
-                  <th className="px-3 py-2 font-bold">Farmers</th>
-                  <th className="px-3 py-2 font-bold">Qty bought</th>
-                  <th className="px-3 py-2 font-bold">Amount paid</th>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-emerald-100 text-left text-xs uppercase tracking-wide text-emerald-800/80">
+                  <th className="px-3 py-3">{t("tokenNumberLabel")}</th>
+                  <th className="px-3 py-3">{t("bookingCode")}</th>
+                  <th className="px-3 py-3">{t("crop")}</th>
+                  <th className="px-3 py-3">{t("quantity")}</th>
+                  <th className="px-3 py-3">{t("date")}</th>
+                  <th className="px-3 py-3">{t("statusLabel")}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-emerald-100 bg-white">
-                {cropTotals.length === 0 ? (
-                  <tr>
-                    <td colSpan="4" className="px-3 py-4 text-slate-600">
-                      No cleared records yet.
+
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.bookingCode} className="border-b border-slate-100">
+                    <td className="px-3 py-3 font-black text-slate-900">{row.tokenNumber}</td>
+
+                    <td className="px-3 py-3 font-mono text-xs text-slate-500">
+                      {row.bookingCode}
+                    </td>
+
+                    <td className="px-3 py-3 text-slate-800">{row.crop?.name}</td>
+
+                    <td className="px-3 py-3 text-slate-800">
+                      {formatQuantity(kgToQuintal(row.quantityKg), locale)} {t("quintal")}
+                    </td>
+
+                    <td className="px-3 py-3 text-slate-800">
+                      {formatDate(row.serviceDate, centre.timezone, locale)}
+                    </td>
+
+                    <td className="px-3 py-3">
+                      <StatusBadge
+                        status={row.status}
+                        label={translateDisplayStatus(t, row.displayStatus)}
+                      />
                     </td>
                   </tr>
-                ) : (
-                  cropTotals.map((crop) => (
-                    <tr key={crop.crop}>
-                      <td className="px-3 py-2 font-semibold text-slate-800">
-                        {crop.crop}
-                      </td>
-                      <td className="px-3 py-2 text-slate-700">
-                        {crop.farmers}
-                      </td>
-                      <td className="px-3 py-2 text-slate-700">
-                        {Number(crop.totalQuantity || 0).toLocaleString(
-                          "en-IN",
-                        )}{" "}
-                        kg
-                      </td>
-                      <td className="px-3 py-2 font-semibold text-slate-900">
-                        ₹{Number(crop.totalAmount || 0).toLocaleString("en-IN")}
-                      </td>
-                    </tr>
-                  ))
-                )}
+                ))}
               </tbody>
             </table>
           </div>
-        </div>
-
-        {clearedFarmers.length > 0 && (
-          <div className="rounded-[22px] border border-emerald-200 bg-emerald-50 p-4 shadow-sm shadow-emerald-200/30">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
-              Cleared records
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {clearedFarmers.map((farmer) => {
-                const isSelected = selectedFarmer?.id === farmer.id;
-
-                return (
-                  <button
-                    key={farmer.id}
-                    type="button"
-                    onClick={() => setActiveFarmerId(farmer.id)}
-                    className={[
-                      "rounded-full border px-3 py-1.5 text-xs font-semibold transition",
-                      isSelected
-                        ? "border-green-700 bg-green-700 text-white"
-                        : "border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100",
-                    ].join(" ")}
-                  >
-                    {farmer.token} • {farmer.slot}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {selectedFarmer ? (
-          <div className="rounded-[26px] border border-emerald-200 bg-white p-4 shadow-sm shadow-emerald-200/30">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">
-                  Active entry
-                </p>
-                <h3 className="text-xl font-black text-slate-900">
-                  {selectedFarmer.token}
-                </h3>
-              </div>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <label className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
-                Farmer name
-                <input
-                  value={form.name}
-                  readOnly
-                  className="mt-1 w-full rounded-xl border border-emerald-200 bg-emerald-50 px-2 py-2 text-sm font-medium text-slate-900"
-                />
-              </label>
-
-              <label className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
-                Token
-                <input
-                  value={form.token}
-                  readOnly
-                  className="mt-1 w-full rounded-xl border border-emerald-200 bg-emerald-50 px-2 py-2 text-sm font-medium text-slate-900"
-                />
-              </label>
-
-              <label className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
-                Crop
-                <input
-                  value={form.crop}
-                  readOnly
-                  className="mt-1 w-full rounded-xl border border-emerald-200 bg-emerald-50 px-2 py-2 text-sm font-medium text-slate-900"
-                />
-              </label>
-
-              <label className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
-                Qty (kg)
-                <input
-                  value={form.quantity}
-                  readOnly
-                  className="mt-1 w-full rounded-xl border border-emerald-200 bg-emerald-50 px-2 py-2 text-sm font-medium text-slate-900"
-                />
-              </label>
-
-              <label className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
-                Slot time
-                <input
-                  value={form.slot}
-                  readOnly
-                  className="mt-1 w-full rounded-xl border border-emerald-200 bg-emerald-50 px-2 py-2 text-sm font-medium text-slate-900"
-                />
-              </label>
-
-              <label className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
-                Date
-                <input
-                  value={selectedFarmer.date ?? selectedDate ?? ""}
-                  readOnly
-                  className="mt-1 w-full rounded-xl border border-emerald-200 bg-emerald-50 px-2 py-2 text-sm font-medium text-slate-900"
-                />
-              </label>
-
-              <label className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
-                Actual weight (kg)
-                <input
-                  value={form.actualWeight}
-                  readOnly
-                  className="mt-1 w-full cursor-default rounded-xl border border-emerald-200 bg-emerald-50 px-2 py-2 text-sm font-medium text-slate-900"
-                />
-              </label>
-
-              <label className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
-                Money (₹)
-                <input
-                  value={form.money}
-                  readOnly
-                  className="mt-1 w-full cursor-default rounded-xl border border-emerald-200 bg-emerald-50 px-2 py-2 text-sm font-medium text-slate-900"
-                />
-              </label>
-
-              <label className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-700">
-                Payment status
-                <input
-                  value={form.paymentStatus}
-                  readOnly
-                  className="mt-1 w-full rounded-xl border border-emerald-200 bg-emerald-50 px-2 py-2 text-sm font-medium text-slate-900"
-                />
-              </label>
-            </div>
-
-          </div>
-        ) : (
-          <div className="rounded-[26px] border border-emerald-200 bg-emerald-50 p-5 text-slate-700">
-            No cleared slots yet for today.
-          </div>
-        )}
-      </div>
-    </>
+        </>
+      )}
+    </OfficerLayout>
   );
-};
+}
 
 export default ReportsPage;
