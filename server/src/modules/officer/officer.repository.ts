@@ -200,6 +200,108 @@ export async function centreTimezone(centreId: string): Promise<string | null> {
   return res.rows[0]?.timezone ?? null;
 }
 
+/**
+ * The centre's shift hours for one weekday, its active lane count, and its
+ * slot configuration — the three things the dashboard needs to state capacity
+ * without guessing at it.
+ *
+ * `day_of_week` follows PostgreSQL's `dow`: 0 = Sunday.
+ */
+export async function centreDaySetup(
+  centreId: string,
+  serviceDate: string,
+): Promise<{
+  name: string;
+  code: string;
+  data_type: string;
+  opens_at: string | null;
+  closes_at: string | null;
+  lane_count: number;
+  reference_quantity_kg: string | null;
+  reference_processing_minutes: number | null;
+  max_daily_processing_kg: string | null;
+} | null> {
+  const res = await query<{
+    name: string;
+    code: string;
+    data_type: string;
+    opens_at: string | null;
+    closes_at: string | null;
+    lane_count: number;
+    reference_quantity_kg: string | null;
+    reference_processing_minutes: number | null;
+    max_daily_processing_kg: string | null;
+  }>(
+    `SELECT pc.name, pc.code, pc.data_type,
+            h.opens_at::text  AS opens_at,
+            h.closes_at::text AS closes_at,
+            (SELECT count(*)::int FROM centre_service_lanes l
+              WHERE l.centre_id = pc.id AND l.is_active) AS lane_count,
+            s.reference_quantity_kg::text        AS reference_quantity_kg,
+            s.reference_processing_minutes       AS reference_processing_minutes,
+            s.max_daily_processing_kg::text      AS max_daily_processing_kg
+       FROM procurement_centres pc
+       LEFT JOIN centre_operating_hours h
+              ON h.centre_id = pc.id
+             AND h.day_of_week = EXTRACT(dow FROM $2::date)::int
+             AND h.effective_from <= $2::date
+             AND (h.effective_to IS NULL OR h.effective_to >= $2::date)
+       LEFT JOIN centre_slot_configurations s
+              ON s.centre_id = pc.id
+             AND s.effective_from <= $2::date
+             AND (s.effective_to IS NULL OR s.effective_to >= $2::date)
+      WHERE pc.id = $1
+      LIMIT 1`,
+    [centreId, serviceDate],
+  );
+  return res.rows[0] ?? null;
+}
+
+/**
+ * Crops this centre procures, each with the ACTIVE support price published for
+ * its season and marketing year.
+ *
+ * The rate is OFFICIAL government data and is returned in paise, exactly as
+ * stored — no rounding, and no conversion to a display string here.
+ */
+export async function centreCropRates(
+  centreId: string,
+): Promise<
+  Array<{
+    crop_id: string;
+    canonical_name: string;
+    variety_or_grade: string | null;
+    rate_per_quintal_paise: string | null;
+    marketing_year: string | null;
+    data_type: string | null;
+  }>
+> {
+  const res = await query<{
+    crop_id: string;
+    canonical_name: string;
+    variety_or_grade: string | null;
+    rate_per_quintal_paise: string | null;
+    marketing_year: string | null;
+    data_type: string | null;
+  }>(
+    `SELECT c.id AS crop_id, c.canonical_name,
+            m.variety_or_grade,
+            m.rate_per_quintal_paise::text AS rate_per_quintal_paise,
+            m.marketing_year,
+            m.data_type
+       FROM centre_crop_configurations ccc
+       JOIN crops c ON c.id = ccc.crop_id
+       LEFT JOIN msp_rates m
+              ON m.crop_id = ccc.crop_id
+             AND m.status = 'ACTIVE'
+             AND (ccc.marketing_year IS NULL OR m.marketing_year = ccc.marketing_year)
+      WHERE ccc.centre_id = $1 AND ccc.is_active
+      ORDER BY c.canonical_name, m.variety_or_grade NULLS FIRST`,
+    [centreId],
+  );
+  return res.rows;
+}
+
 // ---------------------------------------------------------------------------
 // Procurement
 // ---------------------------------------------------------------------------
