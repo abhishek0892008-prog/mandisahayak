@@ -1,4 +1,253 @@
 @import "tailwindcss";
+
+:root {
+  --fq-green: #11a255;
+  --fq-green-dark: #087a40;
+  --fq-green-deep: #075f34;
+  --fq-green-soft: #eaf8f0;
+  --fq-green-softer: #f4fbf7;
+  --fq-green-border: #c9ead8;
+  --fq-page: #f3f5f3;
+  --fq-surface: #ffffff;
+  --fq-text: #1b1a18;
+  --fq-muted: #66716b;
+  --fq-border: #e2e8e4;
+  --fq-radius-sm: 12px;
+  --fq-radius-md: 18px;
+  --fq-radius-lg: 24px;
+  --fq-radius-xl: 28px;
+  --fq-shadow-sm: 0 4px 16px rgba(20, 70, 45, 0.06);
+  --fq-shadow-md: 0 10px 30px rgba(20, 70, 45, 0.09);
+}
+
+html {
+  background: var(--fq-page);
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: var(--fq-page);
+  color: var(--fq-text);
+  font-family:
+    Inter,
+    "Segoe UI",
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button {
+  cursor: pointer;
+}
+
+img,
+svg {
+  max-width: 100%;
+}
+
+.bg-slate-50 {
+  background-color: var(--fq-page) !important;
+}
+
+.bg-green-700 {
+  background-color: var(--fq-green) !important;
+}
+
+.bg-green-600 {
+  background-color: #16a85b !important;
+}
+
+.text-green-700 {
+  color: var(--fq-green-dark) !important;
+}
+
+.text-green-100 {
+  color: #dff6e8 !important;
+}
+
+.bg-green-700:hover,
+.bg-green-600:hover {
+  background-color: var(--fq-green-dark) !important;
+}
+
+.rounded-2xl {
+  border-radius: var(--fq-radius-md) !important;
+}
+
+.rounded-3xl {
+  border-radius: var(--fq-radius-xl) !important;
+}
+
+.shadow-sm {
+  box-shadow: var(--fq-shadow-sm) !important;
+}
+
+input,
+select,
+textarea {
+  border-radius: var(--fq-radius-sm);
+  border-color: var(--fq-border);
+  outline: none;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--fq-green) !important;
+  box-shadow: 0 0 0 3px rgba(17, 162, 85, 0.1);
+}
+
+.fq-container {
+  width: 100%;
+  max-width: 1280px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+@media (min-width: 768px) {
+  .max-w-lg {
+    max-width: 1200px !important;
+  }
+
+  main.mx-auto.w-full.max-w-lg {
+    max-width: 1200px !important;
+    padding-left: 24px !important;
+    padding-right: 24px !important;
+  }
+
+  header .mx-auto.w-full.max-w-lg {
+    max-width: 1200px !important;
+    padding-left: 24px !important;
+    padding-right: 24px !important;
+  }
+
+  main .grid.grid-cols-2 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1100px) {
+  main.mx-auto.w-full.max-w-lg {
+    padding-left: 32px !important;
+    padding-right: 32px !important;
+  }
+
+  header .mx-auto.w-full.max-w-lg {
+    padding-left: 32px !important;
+    padding-right: 32px !important;
+  }
+}
+
+@media (min-width: 640px) and (max-width: 1023px) {
+  main {
+    padding-bottom: 32px;
+  }
+}
+
+@media (max-width: 767px) {
+  body {
+    overflow-x: hidden;
+  }
+
+  main {
+    width: 100%;
+  }
+
+  main.mx-auto.w-full.max-w-lg {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  header .mx-auto.w-full.max-w-lg {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  .rounded-2xl {
+    border-radius: 16px !important;
+  }
+
+  .rounded-3xl {
+    border-radius: 22px !important;
+  }
+
+  button {
+    min-height: 42px;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  p,
+  span,
+  button,
+  a {
+    overflow-wrap: anywhere;
+  }
+}
+
+@media (max-width: 380px) {
+  main.mx-auto.w-full.max-w-lg {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  header .mx-auto.w-full.max-w-lg {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  .rounded-3xl {
+    border-radius: 18px !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 @keyframes successCirclePop {
   0% {
     transform: scale(0);

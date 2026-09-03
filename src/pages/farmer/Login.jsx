@@ -7,17 +7,6 @@ import { translateFieldErrors } from "../../lib/codes";
 import LanguageToggle from "../../components/LanguageToggle";
 import { ErrorState } from "../../components/StateViews";
 
-/**
- * Farmer login.
- *
- * The prototype held the number nowhere and navigated to the OTP screen on a
- * button press. Here the number is state, it is submitted, and the challenge
- * the server returns is what the OTP screen verifies against.
- *
- * The response is deliberately identical for a registered and an unregistered
- * number (authentication.md §2.2), so this screen must not — and does not —
- * tell the user which they are.
- */
 function Login() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -31,7 +20,9 @@ function Login() {
     event.preventDefault();
 
     if (!/^[6-9]\d{9}$/.test(phone)) {
-      setFieldError(t("codes.fieldErrors.PHONE_INVALID_INDIAN_MOBILE"));
+      setFieldError(
+        t("codes.fieldErrors.PHONE_INVALID_INDIAN_MOBILE"),
+      );
       return;
     }
 
@@ -44,7 +35,11 @@ function Login() {
 
       navigate("/verify-otp", {
         replace: true,
-        state: { challenge, phone, purpose: "login" },
+        state: {
+          challenge,
+          phone,
+          purpose: "login",
+        },
       });
     } catch (error) {
       const fields = translateFieldErrors(t, error);
@@ -60,99 +55,171 @@ function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-green-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-6">
-        <div className="flex justify-end">
-          <LanguageToggle variant="onLight" />
-        </div>
+    <div className="min-h-screen bg-[#f3f5f3] text-slate-900">
+      <header className="bg-[#11a255] text-white">
+        <div className="mx-auto flex min-h-[72px] w-full max-w-[1280px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+          <button
+            type="button"
+            onClick={() => navigate("/")}
+            className="flex items-center gap-3 text-left"
+          >
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 text-xl">
+              🌾
+            </span>
 
-        <div className="flex justify-center mb-3">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-green-700 text-2xl shadow-sm">
-            🌾
-          </div>
-        </div>
+            <span>
+              <span className="block text-lg font-extrabold tracking-tight">
+                FarmQueue
+              </span>
 
-        <h1 className="text-2xl font-bold text-green-800 text-center">{t("appName")}</h1>
+              <span className="hidden text-xs font-medium text-white/80 sm:block">
+                Farmer Procurement Portal
+              </span>
+            </span>
+          </button>
 
-        <p className="text-center text-gray-500 mt-1">{t("farmerProcurementPortal")}</p>
-
-        <div className="mt-8">
-          <p className="text-xs font-semibold text-green-700 uppercase tracking-wide">
-            {t("farmerLogin")}
-          </p>
-
-          <h2 className="text-xl font-semibold text-gray-900 mt-3">{t("welcomeBack")}</h2>
-
-          <p className="text-sm text-gray-500 mt-1 mb-6">{t("loginDescription")}</p>
-
-          {submitError && (
-            <ErrorState
-              error={submitError}
-              className="mb-4"
-              onRetry={() => setSubmitError(null)}
-            />
-          )}
-
-          <form className="space-y-5" onSubmit={handleSubmit} noValidate>
-            <div>
-              <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
-                {t("mobileNumber")}
-              </label>
-
-              <div className="flex">
-                <span className="bg-gray-100 border border-gray-200 border-r-0 p-3 rounded-l-lg text-gray-600">
-                  +91
-                </span>
-
-                <input
-                  id="phone"
-                  type="tel"
-                  value={phone}
-                  maxLength={10}
-                  inputMode="numeric"
-                  autoComplete="tel"
-                  placeholder={t("mobileNumberPlaceholder")}
-                  onChange={(event) => {
-                    setPhone(event.target.value.replace(/\D/g, "").slice(0, 10));
-                    setFieldError(null);
-                  }}
-                  className={`flex-1 border rounded-r-lg p-3 bg-gray-50 outline-none focus:border-green-600 focus:ring-2 focus:ring-green-100 ${
-                    fieldError ? "border-red-400" : "border-gray-200"
-                  }`}
-                />
-              </div>
-
-              {fieldError ? (
-                <p className="text-xs text-red-500 mt-1.5">{fieldError}</p>
-              ) : (
-                <p className="text-xs text-gray-400 mt-1.5">{t("otpWillBeSent")}</p>
-              )}
-            </div>
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full bg-green-700 hover:bg-green-800 disabled:cursor-not-allowed disabled:bg-green-300 text-white font-semibold py-3 rounded-lg transition"
-            >
-              {submitting ? t("sendingOtp") : `${t("continueToOtp")} →`}
-            </button>
-          </form>
-
-          <div className="text-center mt-6">
-            <p className="text-sm text-gray-500">{t("noAccount")}</p>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <LanguageToggle />
 
             <button
               type="button"
               onClick={() => navigate("/")}
-              className="text-sm text-green-700 font-semibold hover:underline mt-1"
+              className="rounded-full border border-white/30 bg-white px-4 py-2 text-sm font-bold text-[#0b7f43] transition hover:bg-white/90"
             >
-              {t("registerAsFarmer")}
+              {t("register")}
             </button>
           </div>
         </div>
+      </header>
 
-        <p className="text-center text-xs text-gray-400 mt-6">{t("secureProcurement")}</p>
-      </div>
+      <main className="mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-[1280px] items-center justify-center px-4 py-8 sm:px-6 lg:px-8">
+        <section className="w-full max-w-[500px]">
+          <div className="rounded-[24px] border border-slate-200 bg-white px-5 py-7 shadow-[0_8px_30px_rgba(16,64,42,0.06)] sm:px-8 sm:py-9 lg:px-10 lg:py-10">
+            <div className="text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 text-2xl">
+                🌾
+              </div>
+
+              <p className="mt-6 text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">
+                {t("farmer")} {t("login")}
+              </p>
+
+              <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
+                {t("welcome")}
+              </h1>
+
+              <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-slate-500">
+                {t("enterMobileToContinue") ||
+                  "Enter your registered mobile number to continue to your FarmQueue account."}
+              </p>
+            </div>
+
+            {submitError && (
+              <div className="mt-6">
+                <ErrorState
+                  error={submitError}
+                  onRetry={() => setSubmitError(null)}
+                />
+              </div>
+            )}
+
+            <form
+              className="mt-8"
+              onSubmit={handleSubmit}
+              noValidate
+            >
+              <div>
+                <label
+                  htmlFor="phone"
+                  className="mb-2 block text-sm font-bold text-slate-700"
+                >
+                  {t("mobileNumber")}
+                </label>
+
+                <div
+                  className={`flex overflow-hidden rounded-xl border bg-white transition focus-within:ring-4 focus-within:ring-emerald-50 ${
+                    fieldError
+                      ? "border-red-400 focus-within:border-red-500"
+                      : "border-slate-200 focus-within:border-emerald-500"
+                  }`}
+                >
+                  <span className="flex min-h-14 items-center border-r border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-600">
+                    +91
+                  </span>
+
+                  <input
+                    id="phone"
+                    type="tel"
+                    name="phone"
+                    value={phone}
+                    maxLength={10}
+                    inputMode="numeric"
+                    autoComplete="tel"
+                    placeholder={t("mobileNumberPlaceholder")}
+                    onChange={(event) => {
+                      setPhone(
+                        event.target.value
+                          .replace(/\D/g, "")
+                          .slice(0, 10),
+                      );
+                      setFieldError(null);
+                    }}
+                    className="min-h-14 min-w-0 flex-1 bg-white px-4 text-sm text-slate-900 outline-none placeholder:text-slate-400"
+                  />
+                </div>
+
+                {fieldError ? (
+                  <p className="mt-2 text-xs text-red-500">
+                    {fieldError}
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs leading-5 text-slate-400">
+                    {t("otpWillBeSent")}
+                  </p>
+                )}
+              </div>
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="mt-6 flex min-h-14 w-full items-center justify-center rounded-xl bg-[#0b7f43] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-[#096b39] disabled:cursor-not-allowed disabled:opacity-60 active:scale-[0.99]"
+              >
+                {submitting
+                  ? t("sendingOtp")
+                  : `${t("continueToOtp")} →`}
+              </button>
+            </form>
+
+            <div className="my-7 flex items-center gap-3">
+              <div className="h-px flex-1 bg-slate-200" />
+
+              <span className="text-xs font-medium text-slate-400">
+                {t("noAccount")}
+              </span>
+
+              <div className="h-px flex-1 bg-slate-200" />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => navigate("/")}
+              className="flex min-h-12 w-full items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 px-5 text-sm font-bold text-[#0b7f43] transition hover:bg-emerald-100"
+            >
+              {t("registerAsFarmer")}
+            </button>
+
+            <div className="mt-7 border-t border-slate-100 pt-5 text-center">
+              <p className="text-xs leading-5 text-slate-400">
+                {t("secureProcurement")}
+              </p>
+            </div>
+          </div>
+
+          <p className="mt-5 text-center text-xs font-medium text-slate-400">
+            {t("secureProcurement")}
+          </p>
+        </section>
+      </main>
     </div>
   );
 }
