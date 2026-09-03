@@ -215,9 +215,13 @@ export function buildReferenceRouter(): Router {
         id: string; code: string; name: string; data_type: string; timezone: string;
         storage_check_mode: string; district_name: string; district_id: string;
         lane_count: number; crops: string[] | null;
+        mandi_name: string | null; mandi_grade: string | null; mandi_data_type: string | null;
+        mandi_publisher: string | null; mandi_source_url: string | null;
       }>(
         `SELECT pc.id, pc.code, pc.name, pc.data_type, pc.timezone, pc.storage_check_mode,
                 d.name AS district_name, d.id AS district_id,
+                m.name AS mandi_name, m.grade AS mandi_grade, m.data_type AS mandi_data_type,
+                ds.publisher AS mandi_publisher, ds.source_url AS mandi_source_url,
                 (SELECT count(*)::int FROM centre_service_lanes l
                   WHERE l.centre_id = pc.id AND l.is_active) AS lane_count,
                 (SELECT array_agg(DISTINCT cr.canonical_name)
@@ -226,6 +230,8 @@ export function buildReferenceRouter(): Router {
                   WHERE ccc.centre_id = pc.id AND ccc.is_active) AS crops
            FROM procurement_centres pc
            JOIN districts d ON d.id = pc.district_id
+           LEFT JOIN mandis m ON m.id = pc.mandi_id
+           LEFT JOIN data_sources ds ON ds.id = m.source_id
           WHERE pc.status = 'ACTIVE'
             AND ($1::uuid IS NULL OR pc.district_id = $1::uuid)
             AND ($2::uuid IS NULL OR EXISTS (
@@ -244,6 +250,24 @@ export function buildReferenceRouter(): Router {
           name: r.name,
           dataType: r.data_type,
           district: { id: r.district_id, name: r.district_name },
+          /*
+           * The market the centre sits in, when one is published.
+           *
+           * A mandi is NOT a procurement centre, so this never changes the
+           * centre's own dataType. It is exposed separately, with its own
+           * dataType and publisher, so a client can show what is officially
+           * sourced without implying the centre is. Null means the publishing
+           * authority lists no market in that district — an absence, recorded.
+           */
+          mandi: r.mandi_name
+            ? {
+                name: r.mandi_name,
+                grade: r.mandi_grade,
+                dataType: r.mandi_data_type,
+                publisher: r.mandi_publisher,
+                sourceUrl: r.mandi_source_url,
+              }
+            : null,
           timezone: r.timezone,
           laneCount: r.lane_count,
           acceptedCrops: (r.crops ?? []).sort(),

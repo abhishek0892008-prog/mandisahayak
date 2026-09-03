@@ -14,7 +14,7 @@ import {
   todayInZone,
 } from "../../lib/format";
 import FarmerLayout from "../../components/FarmerLayout";
-import { DataTypeNote, ErrorState, Loading } from "../../components/StateViews";
+import { DataTypeNote, ErrorState, Loading, MandiNote } from "../../components/StateViews";
 
 /**
  * Slot booking.
@@ -314,7 +314,8 @@ function BookSlot() {
 
               {(centres.data ?? []).map((centre) => (
                 <option key={centre.id} value={centre.id}>
-                  {centre.name} — {centre.district?.name}
+                  {centre.mandi ? `${centre.mandi.name} Mandi` : centre.name} —{" "}
+                  {centre.district?.name}
                 </option>
               ))}
             </select>
@@ -326,6 +327,8 @@ function BookSlot() {
             {centres.error && (
               <p className="mt-2 text-xs text-red-500">{translateError(t, centres.error)}</p>
             )}
+
+            {selectedCentre?.mandi && <MandiNote mandi={selectedCentre.mandi} />}
 
             {selectedCentre && <DataTypeNote dataType={selectedCentre.dataType} />}
           </section>

@@ -77,6 +77,10 @@ Requires Node ≥ 22.18 and PostgreSQL 17.
 ## Honest claims
 
 - The five procurement centres are **CONFIGURED demonstration data**, not real government facilities.
+  Each now sits in a **real, OFFICIAL mandi** — name and grade read from the Rajya Krishi Utpadan
+  Mandi Parishad, Uttar Pradesh. The market is government data; the demonstration centre standing
+  in it is not, and the UI states both separately. Bulandshahr has no market in that listing, so
+  its centre is linked to none.
 - The 23 MSP rates are **OFFICIAL** (PIB Cabinet releases, 2026-27) with full provenance, and are **single-sourced and not independently cross-checked** (`last_verified_at IS NULL`).
 - **No real SMS is sent.** The outbox and provider interface are real; delivery is a DEMO adapter.
 - **No money moves.** FarmQueue records payment status and references; it does not disburse, and collects no bank details.

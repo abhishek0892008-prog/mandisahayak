@@ -71,16 +71,39 @@ BEGIN
         format('%s mislabelled rows', bad));
 END $$;
 
--- P4-5  No fabricated government data: mandis and all storage tables are empty.
+-- P4-5  No fabricated government data.
+--
+--   This probe originally asserted mandis = 0. That was the correct test while
+--   no authoritative market list was retrievable: any row would have been
+--   invented. Import 0004 changed the premise — the UP Mandi Parishad publishes
+--   its market list, and it was read directly — so the count is no longer the
+--   thing worth checking.
+--
+--   The INTENT is unchanged and is now tested directly: a mandi row may exist
+--   only if it is OFFICIAL, points at a data_sources row, and carries no code,
+--   because the publication states none. A CONFIGURED mandi, an OFFICIAL one
+--   with no source, or one carrying an invented identifier all fail here.
+--
+--   Storage is untouched: D-10 still forbids centre-level capacity, so all
+--   three storage tables must remain empty.
 DO $$
-DECLARE m int; f int; c int; i int;
+DECLARE bad_mandi int; f int; c int; i int; m int;
 BEGIN
     SELECT count(*) INTO m FROM mandis;
+
+    SELECT count(*) INTO bad_mandi FROM mandis
+     WHERE data_type <> 'OFFICIAL'
+        OR source_id IS NULL
+        OR code IS NOT NULL;
+
     SELECT count(*) INTO f FROM storage_facilities;
     SELECT count(*) INTO c FROM storage_capacity;
     SELECT count(*) INTO i FROM storage_inventory;
-    PERFORM pg_temp.p4('P4-5 no fabricated mandi or storage data', m = 0 AND f = 0 AND c = 0 AND i = 0,
-        format('mandis=%s facilities=%s capacity=%s inventory=%s', m, f, c, i));
+
+    PERFORM pg_temp.p4('P4-5 no fabricated mandi or storage data',
+        bad_mandi = 0 AND f = 0 AND c = 0 AND i = 0,
+        format('mandis=%s unsourced_or_coded=%s facilities=%s capacity=%s inventory=%s',
+               m, bad_mandi, f, c, i));
 END $$;
 
 -- P4-6  No centre carries a government-looking identifier or invented coordinates.

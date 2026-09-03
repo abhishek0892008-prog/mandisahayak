@@ -533,5 +533,6 @@
   "paymentFinal": "यह भुगतान अंतिम है।",
   "notificationPreferences": "सूचना सेटिंग्स",
   "backToNotifications": "सूचनाओं पर वापस",
-  "smsChannelUnavailable": "केवल ऐप-में सूचनाएँ उपलब्ध हैं। इस संस्करण में कोई SMS नहीं भेजा जाता।"
+  "smsChannelUnavailable": "केवल ऐप-में सूचनाएँ उपलब्ध हैं। इस संस्करण में कोई SMS नहीं भेजा जाता।",
+  "mandiOfficial": "{{name}} मंडी · ग्रेड {{grade}} — आधिकारिक मंडी डेटा"
 }

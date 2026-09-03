@@ -174,6 +174,14 @@ async function write(method, path, options = {}) {
   }
 }
 
+/** One admin read under a centre. */
+function adminCentreRead(centreId, resource, query, signal) {
+  return request("GET", `/admin/centres/${encodeURIComponent(centreId)}/${resource}`, {
+    query,
+    signal,
+  });
+}
+
 /** One officer lifecycle transition. All share a shape, so they share a helper. */
 function officerAction(bookingCode, action, body, signal) {
   return write("POST", `/officer/bookings/${encodeURIComponent(bookingCode)}/${action}`, {
@@ -338,6 +346,108 @@ export const api = {
       paymentReference ? { status, paymentReference } : { status },
       signal,
     ),
+
+  // -- admin ---------------------------------------------------------------
+  //
+  // Every route here is ADMIN-only; an officer receives 403 on all of them,
+  // reads included (admin.md §2). Nothing here can create OFFICIAL data —
+  // every insert hardcodes CONFIGURED, and no request field could change that.
+  adminCentres: (includeInactive = false, signal) =>
+    request("GET", "/admin/centres", {
+      query: includeInactive ? { includeInactive: "true" } : undefined,
+      signal,
+    }),
+
+  adminCreateCentre: (centre, signal) =>
+    write("POST", "/admin/centres", { body: centre, signal }),
+
+  adminUpdateCentre: (centreId, patch, signal) =>
+    write("PATCH", `/admin/centres/${encodeURIComponent(centreId)}`, { body: patch, signal }),
+
+  adminCentreLanes: (centreId, signal) => adminCentreRead(centreId, "lanes", undefined, signal),
+
+  adminSetLane: (centreId, lane, signal) =>
+    write("PUT", `/admin/centres/${encodeURIComponent(centreId)}/lanes`, { body: lane, signal }),
+
+  adminCentreHours: (centreId, date, signal) =>
+    adminCentreRead(centreId, "hours", date ? { date } : undefined, signal),
+
+  adminSetHours: (centreId, hours, signal) =>
+    write("PUT", `/admin/centres/${encodeURIComponent(centreId)}/hours`, { body: hours, signal }),
+
+  adminCentreHolidays: (centreId, signal) =>
+    adminCentreRead(centreId, "holidays", undefined, signal),
+
+  adminAddHoliday: (centreId, holiday, signal) =>
+    write("POST", `/admin/centres/${encodeURIComponent(centreId)}/holidays`, {
+      body: holiday,
+      signal,
+    }),
+
+  adminRemoveHoliday: (centreId, date, signal) =>
+    write(
+      "DELETE",
+      `/admin/centres/${encodeURIComponent(centreId)}/holidays/${encodeURIComponent(date)}`,
+      { signal },
+    ),
+
+  adminCentreCrops: (centreId, signal) => adminCentreRead(centreId, "crops", undefined, signal),
+
+  adminSetCentreCrop: (centreId, crop, signal) =>
+    write("PUT", `/admin/centres/${encodeURIComponent(centreId)}/crops`, { body: crop, signal }),
+
+  adminSlotConfig: (centreId, date, signal) =>
+    adminCentreRead(centreId, "slot-config", date ? { date } : undefined, signal),
+
+  adminSetSlotConfig: (centreId, config, signal) =>
+    write("PUT", `/admin/centres/${encodeURIComponent(centreId)}/slot-config`, {
+      body: config,
+      signal,
+    }),
+
+  adminCentreOfficers: (centreId, signal) =>
+    adminCentreRead(centreId, "officers", undefined, signal),
+
+  adminAssignOfficer: (centreId, employeeCode, signal) =>
+    write("POST", `/admin/centres/${encodeURIComponent(centreId)}/officers`, {
+      body: { employeeCode },
+      signal,
+    }),
+
+  adminRevokeOfficer: (centreId, employeeCode, signal) =>
+    write(
+      "DELETE",
+      `/admin/centres/${encodeURIComponent(centreId)}/officers/${encodeURIComponent(employeeCode)}`,
+      { signal },
+    ),
+
+  adminOfficers: (includeInactive = false, signal) =>
+    request("GET", "/admin/officers", {
+      query: includeInactive ? { includeInactive: "true" } : undefined,
+      signal,
+    }),
+
+  adminOfficer: (employeeCode, signal) =>
+    request("GET", `/admin/officers/${encodeURIComponent(employeeCode)}`, { signal }),
+
+  adminCreateOfficer: (officer, signal) =>
+    write("POST", "/admin/officers", { body: officer, signal }),
+
+  adminDeactivateOfficer: (employeeCode, reason, signal) =>
+    write("POST", `/admin/officers/${encodeURIComponent(employeeCode)}/deactivate`, {
+      body: reason ? { reason } : {},
+      signal,
+    }),
+
+  adminReactivateOfficer: (employeeCode, signal) =>
+    write("POST", `/admin/officers/${encodeURIComponent(employeeCode)}/reactivate`, { signal }),
+
+  /** Phone numbers are masked to the last two digits by the server. */
+  adminFarmers: (signal) => request("GET", "/admin/farmers", { signal }),
+
+  /** `before_state`/`after_state` are deliberately not returned. */
+  adminAuditLogs: (limit = 50, signal) =>
+    request("GET", "/admin/audit-logs", { query: { limit }, signal }),
 
   // -- notifications -------------------------------------------------------
   notificationPreferences: (signal) => request("GET", "/notifications/preferences", { signal }),

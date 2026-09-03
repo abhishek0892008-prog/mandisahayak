@@ -76,12 +76,18 @@ psql "$DB_URL" -v ON_ERROR_STOP=1 -q \
     -v configured_by="$ADMIN_ID" \
     -f "$IMPORTS/0003_notification_templates.sql"
 
+echo "import    0004 UP Mandi Parishad mandis (OFFICIAL)"
+psql "$DB_URL" -v ON_ERROR_STOP=1 -q \
+    -v configured_by="$ADMIN_ID" \
+    -f "$IMPORTS/0004_up_mandi_parishad_mandis.sql"
+
 echo
 psql "$DB_URL" -tA -v ON_ERROR_STOP=1 -c "
     SELECT format(
-        'ready: %s migrations, %s crops, %s MSP rates, %s centres, %s bookings',
+        'ready: %s migrations, %s crops, %s MSP rates, %s mandis, %s centres, %s bookings',
         (SELECT count(*) FROM schema_migrations),
         (SELECT count(*) FROM crops),
         (SELECT count(*) FROM msp_rates),
+        (SELECT count(*) FROM mandis),
         (SELECT count(*) FROM procurement_centres),
         (SELECT count(*) FROM bookings))"

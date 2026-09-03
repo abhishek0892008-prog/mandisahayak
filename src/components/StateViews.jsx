@@ -111,6 +111,27 @@ export function DataTypeNote({ dataType }) {
   );
 }
 
+/**
+ * The market a centre sits in, with its provenance.
+ *
+ * Shown separately from the centre's own provenance and deliberately worded so
+ * the two cannot be confused: the market is official government data, the
+ * demonstration centre standing in it is not. Conflating them would turn a
+ * genuine citation into a false claim about the centre.
+ */
+export function MandiNote({ mandi }) {
+  const { t } = useTranslation();
+
+  if (!mandi) return null;
+
+  return (
+    <p className="mt-2 text-xs leading-4 text-slate-500">
+      🏛️ {t("mandiOfficial", { name: mandi.name, grade: mandi.grade })}
+      <span className="block text-slate-400">{mandi.publisher}</span>
+    </p>
+  );
+}
+
 /** A labelled row inside a details card. */
 export function DetailRow({ label, value, emphasis = false }) {
   return (

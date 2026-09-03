@@ -533,5 +533,6 @@
   "paymentFinal": "This payment is final.",
   "notificationPreferences": "Notification preferences",
   "backToNotifications": "Back to notifications",
-  "smsChannelUnavailable": "Only in-app notifications are available. No SMS is sent in this build."
+  "smsChannelUnavailable": "Only in-app notifications are available. No SMS is sent in this build.",
+  "mandiOfficial": "{{name}} Mandi · Grade {{grade}} — official market data"
 }
