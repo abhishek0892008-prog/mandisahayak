@@ -87,9 +87,9 @@ function OfficerPortal() {
               <p className="mt-1 truncate text-sm font-semibold text-white/85">
                 Namaste, {farmer?.fullName ?? "Officer"}
               </p>
-              {centre.selected && (
+              {centre.centre && (
                 <p className="mt-1 truncate text-sm font-semibold text-white/85">
-                  🏪 {centre.selected.name}
+                  🏪 {centre.centre.name}
                 </p>
               )}
             </div>
