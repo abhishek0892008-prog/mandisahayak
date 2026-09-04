@@ -36,12 +36,26 @@ const DEV_TOOLS_TOKEN = import.meta.env.VITE_DEV_OTP_TOKEN ?? "";
  * `message` is for developers and is never rendered.
  */
 export class ApiError extends Error {
-  constructor(status, payload, requestId) {
+  constructor(status, payload, requestId, envelopeParsed = true) {
     const error = payload?.error ?? {};
     super(error.message || `Request failed with status ${status}`);
     this.name = "ApiError";
     this.status = status;
-    this.code = error.code || "INTERNAL_ERROR";
+    /*
+     * Every FarmQueue failure is a JSON envelope: `errorHandler` in
+     * server/src/core/http.ts has no other exit. So a failing response whose
+     * body would not parse as JSON did not come from the API at all — it is
+     * the dev-server proxy, a gateway or a static host answering because the
+     * API could not be reached (Vite returns `502 Bad Gateway` as text/plain
+     * when nothing is listening on the proxy target).
+     *
+     * Defaulting that to INTERNAL_ERROR reports "something went wrong at our
+     * end", which blames the backend for failing when it was never reached —
+     * and sends whoever debugs it looking for a server fault that does not
+     * exist. NETWORK_UNAVAILABLE is the honest answer, and is already
+     * translated.
+     */
+    this.code = error.code || (envelopeParsed ? "INTERNAL_ERROR" : "NETWORK_UNAVAILABLE");
     this.fields = error.fields || null;
     this.details = error.details || null;
     this.requestId = error.requestId || requestId || null;
@@ -145,11 +159,15 @@ async function request(method, path, options = {}) {
   if (response.status === 204) return null;
 
   let payload;
+  // Whether the body was the API's JSON envelope at all. A failing response
+  // that is not JSON came from something in front of the API, not the API.
+  let envelopeParsed = true;
 
   try {
     payload = await response.json();
   } catch {
     payload = null;
+    envelopeParsed = false;
   }
 
   if (!response.ok) {
@@ -157,6 +175,7 @@ async function request(method, path, options = {}) {
       response.status,
       payload,
       response.headers.get("x-request-id"),
+      envelopeParsed,
     );
   }
 

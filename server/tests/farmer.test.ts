@@ -369,7 +369,7 @@ describe('reference data authorization', () => {
     const c = newClient(base);
     await c.primeCsrf();
     const step1 = await c.post<{ challengeId: string }>('/api/v1/auth/staff/login', {
-      username: officer.username, password: officer.password });
+      phone: `+91${officer.phone}` });
     await c.post('/api/v1/auth/otp/verify', {
       challengeId: step1.body.data!.challengeId, otp: demoOtpFor(officer.phone) });
 

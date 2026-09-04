@@ -322,9 +322,20 @@ function OfficerRegistration() {
                       disabled={districts.loading}
                       onChange={(event) => {
                         setDistrictId(event.target.value);
+                        /*
+                         * The whole chain below this is now stale: a centre
+                         * belongs to one district, and a crop to one centre.
+                         * Clearing the select's OPTIONS is not enough — the
+                         * <select> shows blank because no option matches, but
+                         * the state still holds the previous id and would be
+                         * submitted, which the server correctly rejects with
+                         * CENTRE_NOT_IN_DISTRICT / CROP_NOT_CONFIGURED_AT_CENTRE.
+                         */
                         setCentreId("");
+                        setCropId("");
                         clearFieldError("districtId");
                         clearFieldError("centreId");
+                        clearFieldError("cropId");
                       }}
                       className={inputClasses(
                         fieldErrors.districtId || districts.error,
@@ -379,7 +390,11 @@ function OfficerRegistration() {
                       disabled={!districtId || centres.loading}
                       onChange={(event) => {
                         setCentreId(event.target.value);
+                        // Crops are per centre, so the previous choice cannot
+                        // survive a change of centre. See the district note.
+                        setCropId("");
                         clearFieldError("centreId");
+                        clearFieldError("cropId");
                       }}
                       className={inputClasses(
                         fieldErrors.centreId || centres.error,

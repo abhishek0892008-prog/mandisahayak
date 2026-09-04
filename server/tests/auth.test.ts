@@ -20,6 +20,7 @@ import {
   stopTestServer,
   uniquePhone,
 } from './helpers.ts';
+import { attachDemoOtp } from '../src/modules/auth/otp.service.ts';
 
 let base = '';
 
@@ -53,7 +54,7 @@ describe('farmer registration', () => {
       },
     );
     assert.equal(start.status, 201);
-    assert.equal(start.body.data!.otpLength, 6);
+    assert.equal(start.body.data!.otpLength, 4);
     assert.equal(start.body.data!.attemptsRemaining, 5);
 
     // No identity exists yet — the phone is unverified.
@@ -261,18 +262,136 @@ describe('OTP security', () => {
     assert.equal(verify.status, 201, 'the resent OTP must work');
   });
 
-  it('never returns the OTP in any authentication response body', async () => {
+  /*
+   * The OTP must not leak through the authentication response — EXCEPT as the
+   * explicit `devOtp` field demo mode adds, which exists so a demo without an
+   * SMS provider is completable at all. The suite runs with DEMO_MODE on, so
+   * this asserts the narrower property that still has to hold there: the code
+   * appears under that one clearly-named key and nowhere else, and no generic
+   * `otp` field ever appears.
+   *
+   * `attachDemoOtp is inert unless demo mode is on` below covers the
+   * production case directly, without a second server.
+   */
+  it('leaks the OTP nowhere except the explicit demo field', async () => {
     const phone = uniquePhone();
     const c = newClient(base);
     await c.primeCsrf();
     const districtId = await getSeedDistrictId();
-    const start = await c.post('/api/v1/auth/farmer/register/start-otp', {
+    const start = await c.post<{ devOtp?: string }>('/api/v1/auth/farmer/register/start-otp', {
       fullName: 'Test', phone, districtId, consent: { policyVersion: 'v1', accepted: true },
     });
-    const serialised = JSON.stringify(start.body);
+
     const otp = demoOtpFor(phone);
-    assert.ok(!serialised.includes(otp), 'response body must not contain the OTP');
-    assert.ok(!/"otp"/i.test(serialised), 'response body must not contain an otp field');
+    assert.equal(start.body.data!.devOtp, otp, 'demo mode echoes the code it just issued');
+
+    // Strip the one sanctioned field; the OTP must not survive anywhere else.
+    const { devOtp: _devOtp, ...rest } = start.body.data!;
+    const serialised = JSON.stringify({ ...start.body, data: rest });
+    assert.ok(!serialised.includes(otp), 'the OTP appears in devOtp and nowhere else');
+    assert.ok(!/"otp"/i.test(serialised), 'no generic otp field is ever returned');
+  });
+
+  it('attachDemoOtp is inert unless demo mode is on', async () => {
+    const view = {
+      challengeId: 'c0ffee00-0000-4000-a000-000000000001',
+      expiresAt: new Date().toISOString(),
+      resendAvailableAt: new Date().toISOString(),
+      attemptsRemaining: 5,
+      otpLength: 4,
+    };
+
+    // Production configuration: the field must not exist at all — not null,
+    // not empty, absent, so nothing downstream can render a blank demo panel.
+    const production = attachDemoOtp(view, '4821', false);
+    assert.equal('devOtp' in production, false, 'no devOtp key with DEMO_MODE off');
+    assert.deepEqual(production, view, 'the view is returned untouched');
+
+    // Demo configuration echoes the exact code it was given.
+    assert.equal(attachDemoOtp(view, '4821', true).devOtp, '4821');
+
+    // Nothing to echo means no key — the caller passes a decoy's real OTP, so
+    // this branch is defensive rather than reachable today.
+    assert.equal('devOtp' in attachDemoOtp(view, null, true), false);
+  });
+
+  it('a resent code replaces the demo code, so the screen never shows a stale one', async () => {
+    const phone = uniquePhone();
+    const c = newClient(base);
+    await c.primeCsrf();
+    const districtId = await getSeedDistrictId();
+
+    const start = await c.post<{ challengeId: string; devOtp?: string }>(
+      '/api/v1/auth/farmer/register/start-otp',
+      { fullName: 'Resend Demo', phone, districtId, consent: { policyVersion: 'v1', accepted: true } },
+    );
+    const first = start.body.data!.devOtp!;
+    assert.ok(first);
+
+    // Same trick the cooldown test uses: age the send rather than wait 60s.
+    await query(
+      `UPDATE otp_challenges SET last_sent_at = now() - interval '2 minutes' WHERE id = $1`,
+      [start.body.data!.challengeId],
+    );
+
+    const resent = await c.post<{ devOtp?: string }>('/api/v1/auth/otp/resend', {
+      challengeId: start.body.data!.challengeId,
+    });
+    assert.equal(resent.status, 200, JSON.stringify(resent.body));
+
+    const second = resent.body.data!.devOtp!;
+    assert.ok(second, 'a resend echoes the new code too');
+    assert.equal(second, demoOtpFor(phone), 'and it is the code actually issued');
+
+    // The old code is dead: verifying it must fail.
+    if (second !== first) {
+      const stale = await c.post('/api/v1/auth/otp/verify', {
+        challengeId: start.body.data!.challengeId, otp: first,
+      });
+      assert.equal(stale.status, 400, 'the superseded code no longer verifies');
+    }
+  });
+
+  it('the displayed demo code actually verifies', async () => {
+    const phone = uniquePhone();
+    const c = newClient(base);
+    await c.primeCsrf();
+    const districtId = await getSeedDistrictId();
+
+    const start = await c.post<{ challengeId: string; devOtp?: string }>(
+      '/api/v1/auth/farmer/register/start-otp',
+      { fullName: 'Demo Verifies', phone, districtId, consent: { policyVersion: 'v1', accepted: true } },
+    );
+
+    // Exactly what a demo user reads off the screen and types in — no other
+    // source, and no assumption on the client that it is correct.
+    const verify = await c.post('/api/v1/auth/otp/verify', {
+      challengeId: start.body.data!.challengeId,
+      otp: start.body.data!.devOtp!,
+    });
+    assert.equal(verify.status, 201, 'the code shown on screen is the code that works');
+    assert.ok(c.cookie('fq_session'), 'and it mints a real session');
+  });
+
+  it('still rejects a wrong code even though the right one is on screen', async () => {
+    const phone = uniquePhone();
+    const c = newClient(base);
+    await c.primeCsrf();
+    const districtId = await getSeedDistrictId();
+
+    const start = await c.post<{ challengeId: string; devOtp?: string }>(
+      '/api/v1/auth/farmer/register/start-otp',
+      { fullName: 'Wrong Code', phone, districtId, consent: { policyVersion: 'v1', accepted: true } },
+    );
+
+    const shown = start.body.data!.devOtp!;
+    const wrong = String((Number(shown) + 1) % 10000).padStart(shown.length, '0');
+
+    const bad = await c.post('/api/v1/auth/otp/verify', {
+      challengeId: start.body.data!.challengeId, otp: wrong,
+    });
+    assert.equal(bad.status, 400, 'the server remains the source of truth');
+    assert.equal(c.cookie('fq_session'), undefined, 'and no session is created');
   });
 
   it('login is enumeration-resistant for an unknown phone', async () => {
@@ -396,15 +515,24 @@ describe('staff authentication', () => {
     await createStaffUser({ ...admin, role: 'ADMIN' });
   });
 
-  it('requires password AND OTP', async () => {
+  /*
+   * SINGLE FACTOR. `POST /auth/staff/login` takes a phone number and nothing
+   * else; the OTP sent to that phone is the whole credential. These tests
+   * previously asserted a password first factor, which was removed when the
+   * officer portal moved to a phone-first sign-in. They now pin the contract
+   * that actually ships — including, explicitly, that a password is neither
+   * required nor accepted, so the removal can never happen again by accident
+   * and go unnoticed.
+   */
+  it('issues an OTP challenge from the phone number alone', async () => {
     const c = newClient(base);
     await c.primeCsrf();
 
     const step1 = await c.post<{ challengeId: string }>('/api/v1/auth/staff/login', {
-      username: officer.username, password: officer.password,
+      phone: `+91${officer.phone}`,
     });
-    assert.equal(step1.status, 201, 'password step should issue an OTP challenge');
-    assert.equal(c.cookie('fq_session'), undefined, 'no session after password alone');
+    assert.equal(step1.status, 201, 'the phone step should issue an OTP challenge');
+    assert.equal(c.cookie('fq_session'), undefined, 'the challenge alone is not a session');
 
     const step2 = await c.post<{ roles: string[] }>('/api/v1/auth/otp/verify', {
       challengeId: step1.body.data!.challengeId, otp: demoOtpFor(officer.phone),
@@ -413,24 +541,39 @@ describe('staff authentication', () => {
     assert.deepEqual(step2.body.data!.roles, ['OFFICER']);
   });
 
-  it('rejects an invalid password without issuing a challenge', async () => {
+  it('takes no password: sending one neither helps nor is required', async () => {
+    const c = newClient(base);
+    await c.primeCsrf();
+
+    // A wrong password alongside the right phone still succeeds, because no
+    // password is read. This documents the security posture rather than
+    // hiding it: staff hold ONE factor, same as a farmer.
+    const res = await c.post<{ challengeId: string }>('/api/v1/auth/staff/login', {
+      phone: `+91${admin.phone}`, password: 'not-checked-by-anything',
+    });
+    assert.equal(res.status, 201);
+    assert.ok(res.body.data!.challengeId);
+  });
+
+  it('refuses a phone that belongs to no staff account', async () => {
     const c = newClient(base);
     await c.primeCsrf();
     const res = await c.post('/api/v1/auth/staff/login', {
-      username: officer.username, password: 'wrong-password',
+      phone: `+91${uniquePhone()}`,
     });
     assert.equal(res.status, 401);
     assert.equal(res.body.error!.code, 'INVALID_CREDENTIALS');
+    assert.equal(c.cookie('fq_session'), undefined);
   });
 
-  it('rejects an invalid OTP at the second factor', async () => {
+  it('rejects an invalid OTP', async () => {
     const c = newClient(base);
     await c.primeCsrf();
     const step1 = await c.post<{ challengeId: string }>('/api/v1/auth/staff/login', {
-      username: admin.username, password: admin.password,
+      phone: `+91${admin.phone}`,
     });
     const bad = await c.post('/api/v1/auth/otp/verify', {
-      challengeId: step1.body.data!.challengeId, otp: '000000',
+      challengeId: step1.body.data!.challengeId, otp: '0000',
     });
     assert.equal(bad.status, 400);
     assert.equal(c.cookie('fq_session'), undefined);
@@ -441,11 +584,11 @@ describe('staff authentication', () => {
     const c = newClient(base);
     await c.primeCsrf();
 
-    // The phone digits form a syntactically valid username, so this reaches the
-    // credential check rather than being rejected by validation. It must fail
-    // there: farmers have no password and hold no staff role.
+    // The farmer's own phone reaches the account lookup rather than being
+    // rejected by validation. It must fail there: the account exists and the
+    // number is real, but it holds no staff role.
     const res = await c.post('/api/v1/auth/staff/login', {
-      username: phone, password: 'anything',
+      phone: `+91${phone}`,
     });
     assert.equal(res.status, 401);
     assert.equal(res.body.error!.code, 'INVALID_CREDENTIALS');
@@ -453,7 +596,7 @@ describe('staff authentication', () => {
   });
 
   it('staff can log out', async () => {
-    const c = await staffLogin(base, admin.username, admin.password, admin.phone);
+    const c = await staffLogin(base, admin.phone);
     assert.equal((await c.get('/api/v1/me')).status, 200);
     assert.equal((await c.post('/api/v1/auth/logout')).status, 200);
     assert.equal((await c.get('/api/v1/me')).status, 401);
@@ -474,8 +617,8 @@ describe('RBAC', () => {
     await createStaffUser({ ...officer, role: 'OFFICER', centreId });
     await createStaffUser({ ...admin, role: 'ADMIN' });
     farmerClient = (await registerFarmer(base)).client;
-    officerClient = await staffLogin(base, officer.username, officer.password, officer.phone);
-    adminClient = await staffLogin(base, admin.username, admin.password, admin.phone);
+    officerClient = await staffLogin(base, officer.phone);
+    adminClient = await staffLogin(base, admin.phone);
   });
 
   it('rejects unauthenticated requests', async () => {

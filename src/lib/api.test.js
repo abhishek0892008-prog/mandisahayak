@@ -76,6 +76,56 @@ describe("the API client", () => {
     expect(error.code).toBe("NETWORK_UNAVAILABLE");
   });
 
+  /*
+   * The dev server answers `502 Bad Gateway` as text/plain when nothing is
+   * listening on the proxy target, and a gateway or static host does the same
+   * with HTML. The API itself cannot produce that: every failure it emits is a
+   * JSON envelope. So a non-JSON failure means the API was never reached, and
+   * saying "something went wrong at our end" points the blame at a backend
+   * that is not at fault.
+   */
+  it("reports an unreachable API as NETWORK_UNAVAILABLE, not INTERNAL_ERROR", async () => {
+    globalThis.fetch = () =>
+      Promise.resolve({
+        ok: false,
+        status: 502,
+        headers: { get: () => null },
+        json: () => Promise.reject(new SyntaxError("Unexpected token B in JSON at position 0")),
+      });
+
+    const error = await api.districts().catch((caught) => caught);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.status).toBe(502);
+    expect(error.code).toBe("NETWORK_UNAVAILABLE");
+  });
+
+  it("still reports a genuine API fault as INTERNAL_ERROR", async () => {
+    // A real 500 from the API always carries the JSON envelope, so the blame
+    // stays where it belongs.
+    mockApi({ "GET /reference/districts": fail(500, "INTERNAL_ERROR") });
+
+    const error = await api.districts().catch((caught) => caught);
+
+    expect(error.code).toBe("INTERNAL_ERROR");
+    expect(error.status).toBe(500);
+  });
+
+  it("keeps the server's code when a failure body parses but has no envelope", async () => {
+    globalThis.fetch = () =>
+      Promise.resolve({
+        ok: false,
+        status: 500,
+        headers: { get: () => null },
+        json: () => Promise.resolve({ unexpected: true }),
+      });
+
+    const error = await api.districts().catch((caught) => caught);
+
+    // Parsed as JSON, so the API did answer — just not in the shape expected.
+    expect(error.code).toBe("INTERNAL_ERROR");
+  });
+
   it("re-primes and retries ONCE when a write is rejected for CSRF", async () => {
     let attempts = 0;
 

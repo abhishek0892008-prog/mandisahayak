@@ -74,7 +74,7 @@ async function adminClient() {
     phone: uniquePhone(),
   };
   await createStaffUser({ ...spec, role: 'ADMIN' });
-  return staffLogin(base, spec.username, spec.password, spec.phone);
+  return staffLogin(base, spec.phone);
 }
 
 async function officerClient(centreCode = 'DEMO-UP-AGRA-01') {
@@ -87,7 +87,7 @@ async function officerClient(centreCode = 'DEMO-UP-AGRA-01') {
     centreCode,
   ]);
   await createStaffUser({ ...spec, role: 'OFFICER', centreId: c.rows[0].id });
-  return { client: await staffLogin(base, spec.username, spec.password, spec.phone), spec };
+  return { client: await staffLogin(base, spec.phone), spec };
 }
 
 async function districtId() {
@@ -514,7 +514,7 @@ describe('officer provisioning', () => {
 
     // The point of the endpoint: an account that works, over real HTTP,
     // including the OTP second factor staff accounts require.
-    const officer = await staffLogin(base, spec.username, spec.password, spec.phone);
+    const officer = await staffLogin(base, spec.phone);
     assert.equal((await officer.get('/api/v1/me')).status, 200);
   });
 
@@ -542,7 +542,7 @@ describe('officer provisioning', () => {
 
     // Proven operationally as well as in the table: the new account cannot
     // reach the endpoint that made it.
-    const officer = await staffLogin(base, spec.username, spec.password, spec.phone);
+    const officer = await staffLogin(base, spec.phone);
     assert.equal((await officer.get('/api/v1/admin/officers')).status, 403);
   });
 
@@ -642,7 +642,7 @@ describe('officer provisioning', () => {
       201,
     );
 
-    const officer = await staffLogin(base, spec.username, spec.password, spec.phone);
+    const officer = await staffLogin(base, spec.phone);
     const before = await officer.get('/api/v1/officer/centres');
     assert.equal(before.status, 200);
     assert.equal((before.body.data as any).length, 1, 'working, with one posting');
@@ -664,8 +664,7 @@ describe('officer provisioning', () => {
     const relogin = newClient(base);
     await relogin.primeCsrf();
     const attempt = await relogin.post('/api/v1/auth/staff/login', {
-      username: spec.username,
-      password: spec.password,
+      phone: `+91${spec.phone}`,
     });
     assert.equal(attempt.status, 401, 'and they cannot simply sign in again');
   });
@@ -699,7 +698,7 @@ describe('officer provisioning', () => {
     assert.equal(back.status, 200);
     assert.equal((back.body.data as any).reactivated, true);
 
-    const officer = await staffLogin(base, spec.username, spec.password, spec.phone);
+    const officer = await staffLogin(base, spec.phone);
     const centres = await officer.get('/api/v1/officer/centres');
     assert.equal(centres.status, 200);
     assert.equal(

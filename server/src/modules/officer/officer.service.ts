@@ -642,6 +642,100 @@ export async function updatePaymentStatus(
 }
 
 // ---------------------------------------------------------------------------
+// Centre overview
+// ---------------------------------------------------------------------------
+
+/**
+ * Everything the centre dashboard shows that is NOT a booking: the shift hours
+ * for one service date, where capacity comes from, the crops this centre
+ * procures with their ACTIVE support price, and the storage position.
+ *
+ * Composition only — it computes no availability and books nothing. The caller
+ * has already resolved the centre's timezone and checked that this actor may
+ * act on the centre, so an unknown centre reaching here is a caller bug, not a
+ * 404 to invent.
+ *
+ * Rates are OFFICIAL government data, returned in paise exactly as stored, with
+ * a rupee string alongside for display. A crop the centre procures but for
+ * which no ACTIVE rate is published is still listed, with a null rate and a
+ * reason — dropping it would hide a real configuration gap from the officer.
+ */
+export async function centreOverview(centreId: string, serviceDate: string, timezone: string) {
+  const [setup, rates] = await Promise.all([
+    repo.centreDaySetup(centreId, serviceDate),
+    repo.centreCropRates(centreId),
+  ]);
+
+  if (!setup) throw notFound('Centre not found');
+
+  const open = setup.opens_at !== null && setup.closes_at !== null;
+
+  return {
+    centre: {
+      id: centreId,
+      name: setup.name,
+      code: setup.code,
+      dataType: setup.data_type,
+      timezone,
+    },
+    serviceDate,
+    /*
+     * No operating-hours row for this weekday means the centre is closed that
+     * day, not that its hours are unknown. `reasonCode` says which, so the
+     * dashboard never renders an empty shift as "00:00 - 00:00".
+     */
+    hours: {
+      open,
+      opensAt: setup.opens_at,
+      closesAt: setup.closes_at,
+      reasonCode: open ? null : 'NO_OPERATING_HOURS_FOR_DATE',
+    },
+    /*
+     * Where capacity comes from. Null values mean no slot configuration is
+     * effective on this date — the scheduler has nothing to divide the shift
+     * by, so the dashboard must say so rather than imply unlimited capacity.
+     */
+    capacity: {
+      laneCount: setup.lane_count,
+      referenceQuantityKg: num(setup.reference_quantity_kg),
+      referenceProcessingMinutes: setup.reference_processing_minutes,
+      maxDailyProcessingKg: num(setup.max_daily_processing_kg),
+      configured: setup.reference_processing_minutes !== null,
+      reasonCode:
+        setup.reference_processing_minutes !== null ? null : 'NO_SLOT_CONFIGURATION_FOR_DATE',
+    },
+    crops: rates.map((r) => {
+      const paise = num(r.rate_per_quintal_paise);
+      return {
+        cropId: r.crop_id,
+        // The government's own wording; never translated or re-cased.
+        canonicalName: r.canonical_name,
+        varietyOrGrade: r.variety_or_grade,
+        ratePerQuintalPaise: paise,
+        ratePerQuintalRupees: paise === null ? null : paiseToRupeeString(paise),
+        marketingYear: r.marketing_year,
+        dataType: r.data_type,
+        reasonCode: paise === null ? 'NO_ACTIVE_MSP_RATE_FOR_CROP' : null,
+      };
+    }),
+    /*
+     * D-10: no official centre-level capacity figure exists, and
+     * 0006_storage.sql seeds none. A dashboard printing 0 kg, or inventing a
+     * ceiling, would state a fact nobody published — so this reports a reason
+     * instead of a number, exactly as availability does.
+     */
+    storage:
+      setup.storage_check_mode === 'DISABLED'
+        ? { checkMode: 'DISABLED', status: 'NOT_EVALUATED', reasonCode: null }
+        : {
+            checkMode: setup.storage_check_mode,
+            status: 'NOT_AVAILABLE',
+            reasonCode: 'NO_CAPACITY_DATA_FOR_CENTRE',
+          },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Farmer reads
 // ---------------------------------------------------------------------------
 

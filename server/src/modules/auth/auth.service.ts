@@ -323,7 +323,7 @@ export async function startStaffLogin(
 
   if (!user || !isStaff || user.status !== "ACTIVE" || !user.phone_e164) {
     await writeAudit(client, {
-      action: AuditActions.STAFF_PASSWORD_FAILED,
+      action: AuditActions.STAFF_LOGIN_REJECTED,
       entityType: "user",
       entityId: user?.id ?? null,
       actorRole: "SYSTEM",
@@ -347,7 +347,7 @@ export async function startStaffLogin(
   }
 
   await writeAudit(client, {
-    action: AuditActions.STAFF_PASSWORD_VERIFIED,
+    action: AuditActions.STAFF_LOGIN_ACCEPTED,
     entityType: "user",
     entityId: user.id,
     actorUserId: user.id,

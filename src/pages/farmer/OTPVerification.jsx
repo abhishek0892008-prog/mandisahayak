@@ -9,7 +9,13 @@ import useApiResource from "../../hooks/useApiResource";
 import { homePathFor } from "../../auth/roles";
 import LanguageToggle from "../../components/LanguageToggle";
 
-const OTP_LENGTH = 6;
+/**
+ * Only a fallback. The real length comes from the server on every challenge
+ * (`otpLength`), so the number of boxes follows OTP_LENGTH in the backend
+ * config and is never a second, drifting definition on the client. This value
+ * is used solely if a challenge somehow arrives without the field.
+ */
+const FALLBACK_OTP_LENGTH = 4;
 
 function secondsUntil(iso, now) {
   if (!iso) return 0;
@@ -29,7 +35,13 @@ function OTPVerification() {
   const initial = location.state ?? null;
 
   const [challenge, setChallenge] = useState(initial?.challenge ?? null);
-  const [digits, setDigits] = useState(Array(OTP_LENGTH).fill(""));
+
+  // The server dictates how many digits it issued; the UI renders that many.
+  const otpLength = challenge?.otpLength ?? FALLBACK_OTP_LENGTH;
+
+  const [digits, setDigits] = useState(() =>
+    Array(initial?.challenge?.otpLength ?? FALLBACK_OTP_LENGTH).fill(""),
+  );
   const [error, setError] = useState(null);
   const [localError, setLocalError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -37,6 +49,14 @@ function OTPVerification() {
   const [now, setNow] = useState(() => Date.now());
 
   const inputRefs = useRef([]);
+
+  /*
+   * Guards re-entry into verification: the auto-submit fires from a keystroke
+   * and the button fires from a click, and both can land before `submitting`
+   * has re-rendered. Without it a fast typist can spend two of the five
+   * attempts on a single code.
+   */
+  const verifyingRef = useRef(false);
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -55,13 +75,30 @@ function OTPVerification() {
     return `+91 ${phone.slice(0, 2)}XXXXXX${phone.slice(-2)}`;
   }, [phone]);
 
+  /*
+   * The demo code, from the challenge the server just issued.
+   *
+   * `devOtp` is present only when the backend runs with DEMO_MODE, and it is
+   * the EXACT code that backend generated — never a second one invented here.
+   * A resend returns a fresh challenge, so this follows the new code.
+   */
   const demoOtp = useApiResource(
     (signal) => api.devLastOtp(phone, signal),
-    [phone, challenge?.challengeId],
+    /*
+     * `expiresAt`, not just `challengeId`: a RESEND reuses the same challenge
+     * row and therefore the same id, so keying on the id alone left this
+     * showing the superseded code — the farmer typed what was on screen and
+     * was told it was wrong. `expiresAt` moves on every resend.
+     */
+    [phone, challenge?.challengeId, challenge?.expiresAt],
     {
-      enabled: DEMO_OTP_ENABLED && Boolean(phone),
+      // Fallback only: the token-protected lookup still works for setups that
+      // predate `devOtp`, and is skipped entirely once the challenge carries it.
+      enabled: DEMO_OTP_ENABLED && Boolean(phone) && !challenge?.devOtp,
     },
   );
+
+  const demoOtpCode = challenge?.devOtp ?? (DEMO_OTP_ENABLED ? demoOtp.data : null);
 
   if (!challenge) {
     return (
@@ -79,13 +116,13 @@ function OTPVerification() {
     setError(null);
     setLocalError(null);
 
-    setDigits((previous) => {
-      const next = [...previous];
-      next[index] = value;
-      return next;
-    });
+    // Built outside the updater so the completed code is available now; an
+    // updater must stay pure, and StrictMode double-invokes it.
+    const next = [...digits];
+    next[index] = value;
+    commitDigits(next);
 
-    if (value && index < OTP_LENGTH - 1) {
+    if (value && index < otpLength - 1) {
       inputRefs.current[index + 1]?.focus();
     }
   }
@@ -102,31 +139,37 @@ function OTPVerification() {
     const pasted = event.clipboardData
       .getData("text")
       .replace(/\D/g, "")
-      .slice(0, OTP_LENGTH);
+      .slice(0, otpLength);
 
     if (!pasted) return;
 
-    const next = Array(OTP_LENGTH).fill("");
+    const next = Array(otpLength).fill("");
 
     pasted.split("").forEach((digit, index) => {
       next[index] = digit;
     });
 
-    setDigits(next);
     setError(null);
     setLocalError(null);
+    commitDigits(next);
 
-    inputRefs.current[Math.min(pasted.length, OTP_LENGTH - 1)]?.focus();
+    inputRefs.current[Math.min(pasted.length, otpLength - 1)]?.focus();
   }
 
-  async function handleVerify() {
-    const otp = digits.join("");
+  /*
+   * Submits one code. Takes the code as an argument rather than reading
+   * `digits`, so the last keystroke can submit the value it just produced
+   * without waiting a render for state to catch up.
+   */
+  async function verifyWith(otp) {
+    if (verifyingRef.current) return;
 
-    if (otp.length !== OTP_LENGTH) {
-      setLocalError(t("enterCompleteOtp"));
+    if (otp.length !== otpLength) {
+      setLocalError(t("enterCompleteOtp", { digits: otpLength }));
       return;
     }
 
+    verifyingRef.current = true;
     setSubmitting(true);
     setError(null);
     setLocalError(null);
@@ -141,10 +184,29 @@ function OTPVerification() {
       });
     } catch (verifyError) {
       setError(verifyError);
-      setDigits(Array(OTP_LENGTH).fill(""));
+      // Clearing the boxes is also what stops the auto-submit from firing
+      // again on the same rejected code.
+      setDigits(Array(otpLength).fill(""));
       inputRefs.current[0]?.focus();
     } finally {
+      verifyingRef.current = false;
       setSubmitting(false);
+    }
+  }
+
+  function handleVerify() {
+    return verifyWith(digits.join(""));
+  }
+
+  /**
+   * Submits as soon as the last digit lands, so the farmer is not left on a
+   * filled-in screen wondering what to press. The button stays for anyone who
+   * clears a box and retypes it, and for assistive tech.
+   */
+  function commitDigits(next) {
+    setDigits(next);
+    if (next.length === otpLength && next.every((d) => d !== "") && !expired) {
+      verifyWith(next.join(""));
     }
   }
 
@@ -159,7 +221,7 @@ function OTPVerification() {
       const next = await api.resendOtp(challenge.challengeId);
 
       setChallenge(next);
-      setDigits(Array(OTP_LENGTH).fill(""));
+      setDigits(Array(otpLength).fill(""));
       inputRefs.current[0]?.focus();
     } catch (resendError) {
       setError(resendError);
@@ -222,7 +284,7 @@ function OTPVerification() {
               </h1>
 
               <p className="mt-3 text-sm leading-6 text-slate-500">
-                {t("otpSentTo")}
+                {t("otpSentTo", { digits: otpLength })}
               </p>
 
               <p className="mt-1 text-sm font-extrabold text-slate-800">
@@ -245,6 +307,44 @@ function OTPVerification() {
                 <div className="h-full w-full rounded-full bg-[#11a255]" />
               </div>
             </div>
+
+            {demoOtpCode && (
+              <div className="mt-6 rounded-xl border border-amber-300 bg-amber-50 p-3 text-center">
+                <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+                  {t("demoOtpLabel")}
+                </p>
+
+                <p className="mt-1 font-mono text-3xl font-bold tracking-[0.3em] text-amber-900">
+                  {demoOtpCode}
+                </p>
+
+                <p className="mt-2 text-[11px] leading-4 text-amber-700">
+                  {t("demoOtpNote")}
+                </p>
+
+                {/*
+                  A convenience, not an auto-fill: the boxes stay empty until
+                  someone taps this, so the normal typing path is what the demo
+                  actually exercises.
+                */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError(null);
+                    setLocalError(null);
+                    commitDigits(
+                      demoOtpCode
+                        .padEnd(otpLength, "")
+                        .slice(0, otpLength)
+                        .split(""),
+                    );
+                  }}
+                  className="mt-2 text-xs font-semibold text-amber-800 underline"
+                >
+                  {t("demoOtpFill")}
+                </button>
+              </div>
+            )}
 
             <div
               className="mt-8 flex justify-center gap-2 sm:gap-3"
@@ -278,39 +378,6 @@ function OTPVerification() {
               <div className="mt-4 rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-center">
                 <p className="text-xs font-semibold text-red-600">
                   {shownError}
-                </p>
-              </div>
-            )}
-
-            {DEMO_OTP_ENABLED && demoOtp.data && (
-              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-center">
-                <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
-                  {t("demoOtpLabel")}
-                </p>
-
-                <p className="mt-1 font-mono text-2xl font-bold tracking-[0.3em] text-amber-900">
-                  {demoOtp.data}
-                </p>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDigits(
-                      demoOtp.data
-                        .padEnd(OTP_LENGTH, "")
-                        .slice(0, OTP_LENGTH)
-                        .split(""),
-                    );
-                    setError(null);
-                    setLocalError(null);
-                  }}
-                  className="mt-2 text-xs font-semibold text-amber-800 underline"
-                >
-                  {t("demoOtpFill")}
-                </button>
-
-                <p className="mt-2 text-[11px] leading-4 text-amber-700">
-                  {t("demoOtpNote")}
                 </p>
               </div>
             )}

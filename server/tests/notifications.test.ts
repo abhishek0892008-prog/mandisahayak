@@ -223,7 +223,7 @@ async function officerAtHathras() {
     HATHRAS,
   ]);
   await createStaffUser({ ...spec, role: 'OFFICER', centreId: c.rows[0].id });
-  return staffLogin(base, spec.username, spec.password, spec.phone);
+  return staffLogin(base, spec.phone);
 }
 
 type C = ReturnType<typeof newClient>;
@@ -436,7 +436,7 @@ describe('lifecycle notifications', () => {
       phone: uniquePhone(),
     };
     await createStaffUser({ ...spec, role: 'OFFICER', centreId: c.rows[0].id });
-    const officer = await staffLogin(base, spec.username, spec.password, spec.phone);
+    const officer = await staffLogin(base, spec.phone);
 
     await step(officer, code, 'arrive');
     await step(officer, code, 'weighing');
@@ -583,7 +583,7 @@ describe('notification security', () => {
       phone: uniquePhone(),
     };
     await createStaffUser({ ...spec, role: 'ADMIN' });
-    const admin = await staffLogin(base, spec.username, spec.password, spec.phone);
+    const admin = await staffLogin(base, spec.phone);
     assert.equal((await admin.get('/api/v1/notifications')).status, 403);
   });
 

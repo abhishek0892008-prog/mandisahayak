@@ -8,16 +8,16 @@ import LanguageToggle from "../../components/LanguageToggle";
 import { ErrorState } from "../../components/StateViews";
 
 /**
- * Staff sign-in, first factor.
+ * Staff sign-in.
  *
- * The password creates NO session — it returns an OTP challenge, and the
- * second factor goes through the same `/auth/otp/verify` a farmer uses
- * (authentication.md §2.3). So this screen hands the challenge to the shared
- * OTP screen rather than duplicating it.
+ * The phone number is the WHOLE credential: there is no password step. The
+ * server answers with an OTP challenge, and that OTP goes through the same
+ * `/auth/otp/verify` a farmer uses, so this screen hands the challenge to the
+ * shared OTP screen rather than duplicating it.
  *
- * `INVALID_CREDENTIALS` is returned for a wrong password, an unknown user, a
- * non-staff account and an inactive one alike. The UI must not try to tell
- * them apart, and does not.
+ * `INVALID_CREDENTIALS` is returned for an unknown number, a non-staff account
+ * and an inactive one alike. The UI must not try to tell them apart, and does
+ * not — distinguishing them would confirm which numbers belong to staff.
  */
 function OfficerLogin() {
   const { t } = useTranslation();

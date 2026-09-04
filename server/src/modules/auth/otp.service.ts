@@ -21,7 +21,71 @@ export type ChallengeView = {
   resendAvailableAt: string;
   attemptsRemaining: number;
   otpLength: number;
+  /**
+   * DEMO ONLY. The OTP that was just issued, echoed so a demo can be completed
+   * without an SMS provider. Absent unless DEMO_MODE is on — see attachDemoOtp.
+   */
+  devOtp?: string;
 };
+
+/**
+ * Echoes the issued OTP back to the caller, but ONLY in demo mode.
+ *
+ * This deliberately relaxes the rule that an OTP never appears in an
+ * authentication response body. No SMS provider is configured, so a demo
+ * otherwise cannot be completed at all; the alternative in place before this
+ * (a token-protected `/dev/last-otp` lookup) depended on four separate
+ * switches lining up and failed silently whenever any of them did not.
+ *
+ * TWO THINGS THIS COSTS, both confined to demo mode:
+ *
+ *   1. Anyone who can reach the endpoint learns the OTP, so the OTP stops
+ *      being a second factor at all. Demo mode already writes OTPs to the
+ *      server log, so this is a wider audience, not a new kind of exposure.
+ *   2. It must NOT become an enumeration oracle. An unknown phone gets a DECOY
+ *      challenge, so the KEY is always present in demo mode and carries `null`
+ *      when nothing was sent. The response shape is therefore identical for a
+ *      registered and an unregistered number.
+ *
+ * THE INVARIANT THIS FUNCTION EXISTS TO HOLD: `devOtp` is the code that will
+ * actually verify, or it is null. It is never a code that cannot work. A decoy
+ * OTP is generated and hashed like any other but has no account behind it, so
+ * `verifyChallenge` fails it closed — echoing it would put a code on screen
+ * that is guaranteed to be rejected, which is precisely the bug this replaced.
+ *
+ * The first cost is not acceptable in production, which is why `loadConfig`
+ * refuses to start with DEMO_MODE and NODE_ENV=production together. Kept as a
+ * pure function of its arguments so both branches are directly testable
+ * without standing up a second server.
+ */
+export function attachDemoOtp(
+  view: ChallengeView,
+  deliveredOtp: string | null,
+  demoMode: boolean,
+): ChallengeView {
+  if (!demoMode) return view;
+  return { ...view, devOtp: deliveredOtp };
+}
+
+/**
+ * Whether a challenge is a DECOY — issued so an unregistered number is
+ * indistinguishable from a registered one, but with no account behind it.
+ *
+ * Derived from the row rather than stored, and deliberately the SAME condition
+ * `verifyChallenge` fails closed on (a non-registration challenge with no
+ * user). Keeping one definition is the point: if "do not deliver" and "cannot
+ * verify" were decided by different rules they would drift, and a code would
+ * again be delivered that verification refuses.
+ *
+ * A FARMER_REGISTER challenge always has a null `user_id` — the account does
+ * not exist yet — and is never a decoy, which is why purpose is checked first.
+ */
+export function isDecoyChallenge(row: {
+  purpose: OtpPurpose;
+  user_id: string | null;
+}): boolean {
+  return row.purpose !== 'FARMER_REGISTER' && row.user_id === null;
+}
 
 export type ChallengeRow = {
   id: string;
@@ -120,7 +184,11 @@ export async function issueChallenge(
 
   if (!opts.decoy) deliverOtp(opts.phone, otp, opts.purpose);
 
-  return { view: toView(res.rows[0]), otp: opts.decoy ? null : otp };
+  const delivered = opts.decoy ? null : otp;
+  return {
+    view: attachDemoOtp(toView(res.rows[0]), delivered, cfg.DEMO_MODE),
+    otp: delivered,
+  };
 }
 
 export async function loadChallengeForUpdate(
@@ -229,6 +297,18 @@ export async function resendChallenge(
     [row.id, hashOtp(otp, cfg.OTP_PEPPER), new Date(Date.now() + cfg.OTP_TTL_SECONDS * 1000)],
   );
 
-  deliverOtp(row.phone_e164, otp, row.purpose);
-  return toView(res.rows[0]);
+  /*
+   * THE BUG THIS FIXES: delivery used to be unconditional here, while
+   * `issueChallenge` withholds a decoy's code. So a login for an unregistered
+   * number sent nothing on the first request and then DELIVERED on resend —
+   * putting a code on screen (and, in production, an SMS on a stranger's
+   * phone) for a challenge that `verifyChallenge` refuses by design. The user
+   * saw "that OTP is not correct" for a code the server had just handed them.
+   */
+  const decoy = isDecoyChallenge(row);
+  if (!decoy) deliverOtp(row.phone_e164, otp, row.purpose);
+
+  // A resend replaces the code, so the demo must be shown the NEW one — and
+  // nothing at all when nothing was sent.
+  return attachDemoOtp(toView(res.rows[0]), decoy ? null : otp, cfg.DEMO_MODE);
 }

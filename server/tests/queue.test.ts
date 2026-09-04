@@ -552,7 +552,7 @@ async function officerAt(centreCode: string) {
     centreCode,
   ]);
   await createStaffUser({ ...spec, role: 'OFFICER', centreId: c.rows[0].id });
-  return staffLogin(base, spec.username, spec.password, spec.phone);
+  return staffLogin(base, spec.phone);
 }
 
 async function adminClient() {
@@ -562,7 +562,7 @@ async function adminClient() {
     phone: uniquePhone(),
   };
   await createStaffUser({ ...spec, role: 'ADMIN' });
-  return staffLogin(base, spec.username, spec.password, spec.phone);
+  return staffLogin(base, spec.phone);
 }
 
 type C = ReturnType<typeof newClient>;

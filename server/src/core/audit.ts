@@ -23,8 +23,15 @@ export const AuditActions = {
   OTP_FAILED: 'auth.otp_failed',
   OTP_RESENT: 'auth.otp_resent',
   OTP_ATTEMPTS_EXHAUSTED: 'auth.otp_attempts_exhausted',
-  STAFF_PASSWORD_VERIFIED: 'auth.staff_password_verified',
-  STAFF_PASSWORD_FAILED: 'auth.staff_password_failed',
+  /*
+   * Staff sign-in outcomes. Named for the PASSWORD era and renamed when that
+   * factor was removed: an auditor reading "staff_password_verified" would
+   * reasonably conclude a password had been checked, and none is. Rows written
+   * before this rename carry the old `auth.staff_password_verified` /
+   * `auth.staff_password_failed` strings — query both when reading history.
+   */
+  STAFF_LOGIN_ACCEPTED: 'auth.staff_login_accepted',
+  STAFF_LOGIN_REJECTED: 'auth.staff_login_rejected',
   LOGOUT: 'auth.logout',
   SESSION_REVOKED: 'auth.session_revoked',
   AUTHORIZATION_DENIED: 'auth.authorization_denied',

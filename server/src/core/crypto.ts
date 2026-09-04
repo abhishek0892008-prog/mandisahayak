@@ -47,7 +47,8 @@ export function safeEqual(a: Buffer, b: Buffer): boolean {
 
 /**
  * Generates a numeric OTP using a CSPRNG. Never Math.random.
- * Leading zeros are preserved by padding, so "004521" is a valid six-digit OTP.
+ * Leading zeros are significant and preserved, so "0045" is a valid 4-digit OTP.
+ * Compare and store it as a string; parsing it as a number loses them.
  */
 export function generateOtp(length: number): string {
   let out = '';
@@ -59,10 +60,11 @@ export function generateOtp(length: number): string {
  * Peppered HMAC. The pepper lives in the environment, not the database, so a
  * database leak alone does not permit offline OTP recovery.
  *
- * A slow KDF is deliberately NOT used here: a six-digit space cannot be
+ * A slow KDF is deliberately NOT used here: a short numeric space cannot be
  * protected by hashing cost, it is protected by the attempt limit and the short
  * expiry. Using a slow hash would only turn the verify endpoint into a DoS
- * amplifier.
+ * amplifier. That reasoning binds harder now the OTP is four digits — see the
+ * security note on OTP_LENGTH in core/config.ts.
  */
 export function hashOtp(otp: string, pepper: string): Buffer {
   return createHmac('sha256', pepper).update(otp, 'utf8').digest();

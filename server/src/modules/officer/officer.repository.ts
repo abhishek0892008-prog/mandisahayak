@@ -214,6 +214,7 @@ export async function centreDaySetup(
   name: string;
   code: string;
   data_type: string;
+  storage_check_mode: string;
   opens_at: string | null;
   closes_at: string | null;
   lane_count: number;
@@ -225,6 +226,7 @@ export async function centreDaySetup(
     name: string;
     code: string;
     data_type: string;
+    storage_check_mode: string;
     opens_at: string | null;
     closes_at: string | null;
     lane_count: number;
@@ -232,7 +234,7 @@ export async function centreDaySetup(
     reference_processing_minutes: number | null;
     max_daily_processing_kg: string | null;
   }>(
-    `SELECT pc.name, pc.code, pc.data_type,
+    `SELECT pc.name, pc.code, pc.data_type, pc.storage_check_mode,
             h.opens_at::text  AS opens_at,
             h.closes_at::text AS closes_at,
             (SELECT count(*)::int FROM centre_service_lanes l

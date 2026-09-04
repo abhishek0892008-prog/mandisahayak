@@ -31,8 +31,20 @@ const ConfigSchema = z.object({
   SESSION_PEPPER: z.string().min(16, 'SESSION_PEPPER must be at least 16 characters'),
   CSRF_PEPPER: z.string().min(16, 'CSRF_PEPPER must be at least 16 characters'),
 
-  /** OTP policy. Six digits is the approved product requirement (frontend shows six boxes). */
-  OTP_LENGTH: int(6),
+  /**
+   * OTP policy.
+   *
+   * FOUR digits, by product decision. The length is served to the client in
+   * every challenge (`otpLength`), so the UI renders the right number of boxes
+   * from this one value — it is never hardcoded on the client.
+   *
+   * SECURITY NOTE: four digits is a 10,000-value space against six digits'
+   * 1,000,000. What bounds a guessing attack here is therefore NOT the length
+   * but OTP_MAX_ATTEMPTS (5 per challenge), OTP_TTL_SECONDS (5 minutes),
+   * OTP_MAX_RESENDS, and the per-phone / per-IP buckets in core/rateLimit.ts.
+   * Those controls must not be relaxed while the OTP is this short.
+   */
+  OTP_LENGTH: int(4),
   OTP_TTL_SECONDS: int(300),
   OTP_MAX_ATTEMPTS: int(5),
   OTP_RESEND_COOLDOWN_SECONDS: int(60),

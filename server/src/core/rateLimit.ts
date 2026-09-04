@@ -26,7 +26,12 @@ export const RateLimits = {
   OTP_SEND_PER_IP: { name: 'otp_send_ip', limit: 20, windowSeconds: 60 * 60 },
   OTP_VERIFY_PER_IP: { name: 'otp_verify_ip', limit: 30, windowSeconds: 15 * 60 },
   REGISTER_PER_IP: { name: 'register_ip', limit: 10, windowSeconds: 60 * 60 },
-  STAFF_LOGIN_PER_USERNAME: { name: 'staff_login_user', limit: 5, windowSeconds: 15 * 60 },
+  /*
+   * Staff sign-in is per PHONE now, not per username — the endpoint takes
+   * no username. The per-account bucket is therefore OTP_SEND_PER_PHONE
+   * above (3 per 15 minutes), which is stricter than the per-username
+   * limit it replaces, so removing that bucket loosened nothing.
+   */
   STAFF_LOGIN_PER_IP: { name: 'staff_login_ip', limit: 30, windowSeconds: 60 * 60 },
   // Officer registration is a public write, so it stays limited — flooding it
   // from one source is the realistic abuse. An hour window rather than a day

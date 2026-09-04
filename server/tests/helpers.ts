@@ -263,20 +263,18 @@ export async function registerFarmer(base: string, phone = uniquePhone()) {
 }
 
 /**
- * Logs a staff user in through BOTH factors and returns the authenticated
- * client. Password alone never yields a session.
+ * Logs a staff user in and returns the authenticated client.
+ *
+ * SINGLE FACTOR, deliberately: `POST /auth/staff/login` takes a phone number
+ * and nothing else, so an OTP to that phone is the only credential. The
+ * password column still exists on `users` but no login path reads it.
+ * See the staff-auth row in docs/phase-5-authentication.md.
  */
-export async function staffLogin(
-  baseUrl: string,
-  username: string,
-  password: string,
-  phone: string,
-) {
+export async function staffLogin(baseUrl: string, phone: string) {
   const c = newClient(baseUrl);
   await c.primeCsrf();
   const step1 = await c.post<{ challengeId: string }>('/api/v1/auth/staff/login', {
-    username,
-    password,
+    phone: `+91${phone}`,
   });
   if (step1.status !== 201) throw new Error(`staff login failed: ${JSON.stringify(step1.body)}`);
   const step2 = await c.post('/api/v1/auth/otp/verify', {

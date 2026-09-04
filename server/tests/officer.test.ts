@@ -230,13 +230,13 @@ async function officerAt(centreCode: string) {
     centreCode,
   ]);
   await createStaffUser({ ...spec, role: 'OFFICER', centreId: c.rows[0].id });
-  return staffLogin(base, spec.username, spec.password, spec.phone);
+  return staffLogin(base, spec.phone);
 }
 
 async function adminClient() {
   const spec = staffSpec();
   await createStaffUser({ ...spec, role: 'ADMIN' });
-  return staffLogin(base, spec.username, spec.password, spec.phone);
+  return staffLogin(base, spec.phone);
 }
 
 type C = ReturnType<typeof newClient>;
@@ -949,5 +949,124 @@ describe('the farmer sees what the officer recorded', () => {
 
     const officerView = await officer.get(`/api/v1/officer/bookings/${code}`);
     assert.doesNotMatch(JSON.stringify(officerView.body), uuid);
+  });
+});
+
+// ===========================================================================
+/**
+ * GET /officer/centres/:centreId/overview
+ *
+ * This route shipped with a call to a `centreOverview` that did not exist in
+ * any module, so every request to it raised a ReferenceError and returned 500.
+ * `tsc` caught it; nothing else did, because no test covered the route. These
+ * tests are that cover.
+ */
+describe('centre overview', () => {
+  async function centreIdOf(code: string) {
+    const r = await query<{ id: string }>(
+      'SELECT id FROM procurement_centres WHERE code = $1',
+      [code],
+    );
+    return r.rows[0].id;
+  }
+
+  it('returns the day setup, capacity, crops and storage position', async () => {
+    const officer = await officerAt(MATHURA);
+    const centreId = await centreIdOf(MATHURA);
+
+    const res = await officer.get<{
+      centre: { id: string; name: string; code: string; dataType: string; timezone: string };
+      serviceDate: string;
+      hours: { open: boolean; opensAt: string | null; closesAt: string | null; reasonCode: string | null };
+      capacity: { laneCount: number; configured: boolean; referenceProcessingMinutes: number | null };
+      crops: Array<{
+        canonicalName: string;
+        ratePerQuintalPaise: number | null;
+        ratePerQuintalRupees: string | null;
+        dataType: string | null;
+        reasonCode: string | null;
+      }>;
+      storage: { checkMode: string; status: string; reasonCode: string | null };
+    }>(`/api/v1/officer/centres/${centreId}/overview`);
+
+    assert.equal(res.status, 200, JSON.stringify(res.body));
+
+    assert.equal(res.body.data!.centre.code, MATHURA);
+    assert.equal(res.body.data!.centre.dataType, 'CONFIGURED');
+    assert.ok(res.body.data!.centre.timezone, 'the centre timezone is stated, never assumed');
+    assert.match(res.body.data!.serviceDate, /^\d{4}-\d{2}-\d{2}$/);
+
+    // Capacity is reported from configuration, not invented.
+    assert.ok(res.body.data!.capacity.laneCount > 0, 'the demo centre has active lanes');
+
+    // Crops carry the OFFICIAL rate, in paise, with a rupee string for display.
+    const crops = res.body.data!.crops;
+    assert.ok(crops.length > 0, 'the centre procures at least one crop');
+    for (const crop of crops) {
+      assert.ok(crop.canonicalName.length > 0);
+      if (crop.ratePerQuintalPaise === null) {
+        assert.equal(crop.reasonCode, 'NO_ACTIVE_MSP_RATE_FOR_CROP', 'an absent rate is explained');
+        assert.equal(crop.ratePerQuintalRupees, null);
+      } else {
+        assert.equal(crop.dataType, 'OFFICIAL', 'a published rate is government data');
+        assert.equal(crop.reasonCode, null);
+        assert.ok(Number.isInteger(crop.ratePerQuintalPaise));
+        assert.match(crop.ratePerQuintalRupees!, /^\d+\.\d{2}$/);
+      }
+    }
+
+    // D-10: a reason, never an invented number.
+    assert.equal(res.body.data!.storage.status, 'NOT_AVAILABLE');
+    assert.equal(res.body.data!.storage.reasonCode, 'NO_CAPACITY_DATA_FOR_CENTRE');
+  });
+
+  it('honours an explicit date and explains a day with no shift', async () => {
+    const officer = await officerAt(MATHURA);
+    const centreId = await centreIdOf(MATHURA);
+
+    const res = await officer.get<{
+      serviceDate: string;
+      hours: { open: boolean; reasonCode: string | null };
+    }>(`/api/v1/officer/centres/${centreId}/overview?date=2026-01-04`);
+
+    assert.equal(res.status, 200);
+    assert.equal(res.body.data!.serviceDate, '2026-01-04');
+    // Open or closed, the answer is explicit — never an empty shift rendered
+    // as a real one.
+    if (!res.body.data!.hours.open) {
+      assert.equal(res.body.data!.hours.reasonCode, 'NO_OPERATING_HOURS_FOR_DATE');
+    }
+  });
+
+  it('validates the centre id and the date', async () => {
+    const officer = await officerAt(MATHURA);
+    const centreId = await centreIdOf(MATHURA);
+
+    assert.equal((await officer.get('/api/v1/officer/centres/not-a-uuid/overview')).status, 400);
+    assert.equal(
+      (await officer.get(`/api/v1/officer/centres/${centreId}/overview?date=04-01-2026`)).status,
+      400,
+    );
+  });
+
+  it('refuses an officer the overview of a centre they are not assigned to', async () => {
+    const officer = await officerAt(MATHURA);
+    const otherCentreId = await centreIdOf('DEMO-UP-AGRA-01');
+
+    // 404, not 403: "exists but not yours" and "does not exist" must be
+    // indistinguishable, or the id becomes a probe.
+    const res = await officer.get(`/api/v1/officer/centres/${otherCentreId}/overview`);
+    assert.equal(res.status, 404);
+  });
+
+  it('refuses a farmer and an anonymous caller', async () => {
+    const centreId = await centreIdOf(MATHURA);
+    const { client: farmer } = await registerFarmer(base);
+
+    assert.equal((await farmer.get(`/api/v1/officer/centres/${centreId}/overview`)).status, 403);
+    assert.equal(
+      (await newClient(base).get(`/api/v1/officer/centres/${centreId}/overview`)).status,
+      401,
+    );
   });
 });

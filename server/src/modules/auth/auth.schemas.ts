@@ -90,13 +90,16 @@ export const OtpResendSchema = z.object({
   challengeId: z.string().uuid("CHALLENGE_ID_INVALID"),
 });
 
-export const UsernameSchema = z
-  .string()
-  .trim()
-  .min(3, "USERNAME_INVALID")
-  .max(64, "USERNAME_INVALID")
-  .regex(/^[a-z0-9._-]+$/, "USERNAME_INVALID");
-
+/**
+ * Staff sign-in takes a phone number and NOTHING ELSE.
+ *
+ * There is no password factor: the officer portal signs in the way the farmer
+ * portal does, and `startStaffLogin` reads no credential beyond this phone.
+ * `users.password_hash` still exists and admin provisioning still sets one,
+ * but no login path reads it. That makes OFFICER and ADMIN single-factor
+ * accounts — see the staff-auth row in docs/phase-5-authentication.md before
+ * relying on it.
+ */
 export const StaffLoginSchema = z.object({
   phone: PhoneSchema,
 });

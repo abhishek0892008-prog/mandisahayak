@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import api from "../../lib/api";
+import { useAuth } from "../../auth/context";
 import { translateError, translateFieldErrors, translateReason } from "../../lib/codes";
 import useApiResource from "../../hooks/useApiResource";
 import LanguageToggle from "../../components/LanguageToggle";
@@ -12,6 +13,7 @@ const CONSENT_POLICY_VERSION = "v1";
 function Registration() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth();
 
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -23,12 +25,22 @@ function Registration() {
   const [submitError, setSubmitError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
+  // Public: registration has to list districts BEFORE a session exists, since
+  // the id it returns is what `POST /auth/farmer/register/start-otp` requires.
   const districts = useApiResource((signal) => api.districts(signal), []);
 
+  /*
+   * Villages, unlike districts, sit behind `reference.read` — a permission a
+   * farmer only holds once signed in. This screen is reached signed out, so
+   * asking without a session could only ever produce a 401. `villageId` is
+   * optional at registration precisely because no village data exists yet
+   * (LGD village data was not retrievable; the endpoint answers
+   * `available: false`), so the field is simply not offered here.
+   */
   const villages = useApiResource(
     (signal) => api.villages(districtId, signal),
     [districtId],
-    { enabled: Boolean(districtId) }
+    { enabled: isAuthenticated && Boolean(districtId) }
   );
 
   const villageOptions = villages.data?.available

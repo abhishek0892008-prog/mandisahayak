@@ -50,6 +50,37 @@ export const districts = [
   },
 ];
 
+/**
+ * `GET /reference/registration-centres?districtId=` — the PUBLIC, deliberately
+ * narrow projection the officer application form uses. Captured verbatim from
+ * the running backend: note `acceptedCrops` are {id, name} OBJECTS here, unlike
+ * the plain crop-name strings on `centres` below (`/reference/centres`). The
+ * crop dropdown is driven from this nested list, not from a separate request.
+ */
+export const registrationCentres = [
+  {
+    id: "55555555-0000-4000-a000-000000000001",
+    code: "DEMO-UP-ALIGARH-01",
+    name: "Aligarh Demonstration Procurement Centre",
+    district: { id: "44444444-0000-4000-a000-000000000011", name: "Aligarh" },
+    acceptedCrops: [
+      { id: "c9422b7f-858f-4740-a964-780671c8ca4c", name: "Paddy" },
+      { id: "a5ebf3f4-c6d4-438a-b5dc-4ee4f06ef5a2", name: "Wheat" },
+    ],
+  },
+];
+
+/** Agra's centre accepts Wheat only — the contrast that exposes a stale crop. */
+export const registrationCentresAgra = [
+  {
+    id: "55555555-0000-4000-a000-000000000002",
+    code: "DEMO-UP-AGRA-01",
+    name: "Agra Demonstration Procurement Centre",
+    district: { id: "44444444-0000-4000-a000-000000000012", name: "Agra" },
+    acceptedCrops: [{ id: "a5ebf3f4-c6d4-438a-b5dc-4ee4f06ef5a2", name: "Wheat" }],
+  },
+];
+
 /** Village data is genuinely unavailable; this is a 200, not an error. */
 export const villagesUnavailable = {
   districtId: "44444444-0000-4000-a000-000000000012",
@@ -334,7 +365,9 @@ export const otpChallenge = {
   expiresAt: new Date(Date.now() + 300_000).toISOString(),
   resendAvailableAt: new Date(Date.now() + 60_000).toISOString(),
   attemptsRemaining: 5,
-  otpLength: 6,
+  // Mirrors OTP_LENGTH in server/src/core/config.ts. The UI takes the box
+  // count from this field, so it is the fixture that drives the assertion.
+  otpLength: 4,
 };
 
 export const session = {

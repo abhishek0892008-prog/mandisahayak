@@ -25,6 +25,7 @@ import * as repo from './officer.repository.ts';
 import type { OfficerCtx } from './officer.service.ts';
 import {
   cancelAtCentre,
+  centreOverview,
   completeProcurement,
   getBooking,
   getOwnPayment,

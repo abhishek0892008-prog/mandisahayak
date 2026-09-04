@@ -14,7 +14,7 @@
 | TypeScript execution | **Node 24 native type stripping** — no build step, no `tsx`, no `ts-node` | Fewer dependencies and no compile artefact. `npm run typecheck` still runs `tsc --noEmit`, which passes clean |
 | Dependencies | **3 runtime: `express`, `pg`, `zod`** | The approved stack, nothing more |
 | Password KDF | **scrypt (`node:crypto`)**, not Argon2id | **Disclosed deviation from architecture §4.1.** Argon2 needs a native module (node-gyp or prebuilt binaries) — avoidable supply-chain and build fragility. scrypt is RFC 7914, memory-hard, in Node core. The stored hash is self-describing and versioned (`scrypt$N$r$p$salt$hash`), so swapping to Argon2id later is a verifier change plus rehash-on-login, with **no schema change** |
-| OTP length | **6 digits** | The approved architecture and the existing frontend (six input boxes). Your brief said "4-digit if that is the approved product requirement" — it is not; 6 is. Configurable via `OTP_LENGTH` |
+| OTP length | **4 digits** | Phase 5 shipped 6 on the reading that 6 was the approved requirement. That was **superseded by a later product decision: 4 digits.** The client no longer hardcodes a count — it renders `otpLength` from the challenge, so `OTP_LENGTH` in `server/src/core/config.ts` is the single definition. A 4-digit space (10,000) is guarded by the attempt limit, TTL and rate-limit buckets, not by length; see the security note on `OTP_LENGTH` |
 | Migrations | **None needed** | Phase 2's schema already had every table. CSRF is stateless (HMAC), so it required no column. Migrations 0001–0013 are untouched |
 
 ---
@@ -61,8 +61,8 @@ A test asserts no column matching `%aadhaar%`, `%ifsc%` or `%account_number%` ex
 | OTP limits | 5 min expiry · 5 attempts · 60 s resend cooldown · max 3 resends · one-time use |
 | Opaque failures | Wrong / expired / consumed / exhausted / unknown all return `400 OTP_INVALID` |
 | Login enumeration | Unknown phone gets a real **decoy challenge**; identical status, fields and shape. No OTP delivered, so it can never verify |
-| Staff auth | Password (scrypt) **+** OTP second factor. Password alone creates no session |
-| Timing | `verifyPassword` burns equivalent scrypt work when the user doesn't exist |
+| Staff auth | **Phone + OTP, SINGLE FACTOR.** Phase 5 shipped password (scrypt) + OTP; the password factor was removed when the officer portal moved to a phone-first sign-in, so `POST /auth/staff/login` now takes a phone number and nothing else. `users.password_hash` is still written by admin provisioning but no login path reads it. **OFFICER and ADMIN accounts are therefore no stronger than a farmer's**, which is a deliberate demo-scope decision, not an oversight — revisit before any real deployment |
+| Timing | `verifyPassword` burns equivalent scrypt work when the user doesn't exist. Now unreachable from staff login, which reads no password |
 | Sessions | Opaque 256-bit token; **only SHA-256 stored**; `HttpOnly` + `SameSite=Lax` + `Path=/`; `__Host-` prefix in production |
 | Revocation | Immediate — roles, permissions and centre scope are re-read from the DB on every request |
 | Privilege | Roles assigned by the **server from the flow**. Farmer registration can only produce `FARMER` |
@@ -117,7 +117,7 @@ This is the same root cause as the rate limiter needing its own connection, and 
 | farmer registration (4) | valid; **no user exists before verification**; duplicate → 409; invalid phone/consent/district; no Aadhaar/IFSC columns |
 | OTP security (8) | wrong OTP; **5-attempt limit then correct OTP refused**; expiry; one-time use / replay; resend cooldown then success; OTP never in a response body; enumeration resistance; login by OTP |
 | sessions (6) | logout; revoked session; expired session; forged token; HttpOnly/SameSite/Path flags; **raw token never equals a stored value** |
-| staff authentication (5) | password+OTP required; bad password; bad OTP; farmer cannot use the staff endpoint; logout |
+| staff authentication (5) | challenge issued from the phone alone; a password is neither required nor read; unknown phone refused; bad OTP; farmer cannot use the staff endpoint; logout |
 | RBAC (7) | unauthenticated → 401; farmer → officer 403; farmer → admin 403; **officer → admin 403**; officer OK; admin OK; denials audited; roles unchangeable via request |
 | CSRF (4) | missing; mismatched; **forged pair without a valid HMAC**; safe methods exempt |
 | rate limiting (2) | limit fires; breach audited |
@@ -203,7 +203,7 @@ Contract for the frontend team: **`docs/api/authentication.md`**.
 
 **WHAT I INSPECTED:** the prototype's registration/login/OTP screens (to define the contract deliberately against them, not copy them), the approved architecture §4/§5, and the Phase 2 schema.
 
-**WHAT I IMPLEMENTED:** farmer registration, farmer OTP login, staff password+OTP 2FA, opaque revocable sessions, deny-by-default RBAC with a startup assertion, stateless CSRF, DB-backed rate limiting, redacted append-only audit logging, and 15 routes.
+**WHAT I IMPLEMENTED:** farmer registration, farmer OTP login, staff password+OTP 2FA (since reduced to phone+OTP — see the staff-auth row above), opaque revocable sessions, deny-by-default RBAC with a startup assertion, stateless CSRF, DB-backed rate limiting, redacted append-only audit logging, and 15 routes.
 
 **FILES CREATED:** `server/package.json`, `tsconfig.json`, 12 `src/**` modules, `tests/helpers.ts`, `tests/auth.test.ts`, `docs/api/authentication.md`, `docs/phase-5-authentication.md`.
 
