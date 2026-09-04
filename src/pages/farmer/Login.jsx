@@ -69,7 +69,7 @@ function Login() {
 
             <span>
               <span className="block text-lg font-extrabold tracking-tight">
-                FarmQueue
+                {t("appName")}
               </span>
 
               <span className="hidden text-xs font-medium text-white/80 sm:block">
@@ -83,10 +83,10 @@ function Login() {
 
             <button
               type="button"
-              onClick={() => navigate("/register")}
-              className="rounded-full border border-white/30 bg-white px-4 py-2 text-sm font-bold text-[#0b7f43] transition hover:bg-white/90"
+              onClick={() => navigate("/staff-login")}
+              className="rounded-full border border-white/30 bg-white/10 px-4 py-2 text-sm font-bold text-white transition hover:bg-white/20"
             >
-              {t("register")}
+              {t("staffLogin")}
             </button>
           </div>
         </div>
@@ -182,7 +182,7 @@ function Login() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="mt-6 flex min-h-14 w-full items-center justify-center rounded-xl bg-[#0b7f43] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-[#096b39] disabled:cursor-not-allowed disabled:opacity-60 active:scale-[0.99]"
+                className="mt-6 flex min-h-14 w-full items-center justify-center rounded-xl bg-[#15803d] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-[#166534] disabled:cursor-not-allowed disabled:opacity-60 active:scale-[0.99]"
               >
                 {submitting
                   ? t("sendingOtp")
@@ -203,10 +203,20 @@ function Login() {
             <button
               type="button"
               onClick={() => navigate("/register")}
-              className="flex min-h-12 w-full items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 px-5 text-sm font-bold text-[#0b7f43] transition hover:bg-emerald-100"
+              className="flex min-h-12 w-full items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 px-5 text-sm font-bold text-[#15803d] transition hover:bg-emerald-100"
             >
               {t("registerAsFarmer")}
             </button>
+
+            <p className="mt-5 text-center text-sm text-slate-500">
+              <button
+                type="button"
+                onClick={() => navigate("/staff-login")}
+                className="font-bold text-emerald-700 hover:underline"
+              >
+                {t("staffLogin")}
+              </button>
+            </p>
 
             <div className="mt-7 border-t border-slate-100 pt-5 text-center">
               <p className="text-xs leading-5 text-slate-400">

@@ -150,7 +150,7 @@ function Registration() {
             <button
               type="button"
               onClick={() => navigate("/login")}
-              className="rounded-full border border-white/30 bg-white px-4 py-2 text-sm font-bold text-[#0b7f43] transition hover:bg-white/90"
+              className="rounded-full border border-white/30 bg-white px-4 py-2 text-sm font-bold text-[#15803d] transition hover:bg-white/90"
             >
               {t("login")}
             </button>
@@ -434,7 +434,7 @@ function Registration() {
                         setConsent(event.target.checked);
                         clearFieldError("consent");
                       }}
-                      className="mt-1 h-4 w-4 accent-[#0b7f43]"
+                      className="mt-1 h-4 w-4 accent-[#15803d]"
                     />
 
                     <span className="text-xs leading-5 text-slate-600">
@@ -453,7 +453,7 @@ function Registration() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="flex min-h-14 w-full items-center justify-center rounded-xl bg-[#0b7f43] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-[#096b39] disabled:cursor-not-allowed disabled:opacity-60 active:scale-[0.99]"
+                className="flex min-h-14 w-full items-center justify-center rounded-xl bg-[#15803d] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-[#166534] disabled:cursor-not-allowed disabled:opacity-60 active:scale-[0.99]"
               >
                 {submitting ? t("sendingOtp") : t("continueToOtp")}
                 <span className="ml-2 text-lg">→</span>

@@ -356,7 +356,7 @@ function OTPVerification() {
               type="button"
               onClick={handleVerify}
               disabled={submitting || expired}
-              className="mt-6 flex min-h-14 w-full items-center justify-center rounded-xl bg-[#0b7f43] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-[#096b39] active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-emerald-300"
+              className="mt-6 flex min-h-14 w-full items-center justify-center rounded-xl bg-[#15803d] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-[#166534] active:scale-[0.99] disabled:cursor-not-allowed disabled:bg-emerald-300"
             >
               {submitting ? t("verifying") : `${t("verifyAndContinue")} →`}
             </button>

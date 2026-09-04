@@ -69,7 +69,7 @@ export default function LanguageSelector() {
                 onClick={() => changeLanguage(language.code)}
                 className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition ${
                   selected
-                    ? "bg-emerald-50 font-semibold text-[#0b7f43]"
+                    ? "bg-emerald-50 font-semibold text-[#15803d]"
                     : "text-slate-700 hover:bg-slate-50"
                 }`}
               >

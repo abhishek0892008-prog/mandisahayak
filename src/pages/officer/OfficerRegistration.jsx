@@ -164,7 +164,7 @@ function OfficerRegistration() {
           <button
             type="button"
             onClick={() => navigate("/staff-login")}
-            className="rounded-full border border-white/30 bg-white px-4 py-2 text-sm font-bold text-[#0b7f43] transition hover:bg-white/90"
+            className="rounded-full border border-white/30 bg-white px-4 py-2 text-sm font-bold text-[#15803d] transition hover:bg-white/90"
           >
             {t("login")}
           </button>
