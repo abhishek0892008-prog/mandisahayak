@@ -70,7 +70,7 @@ export function useOfficerQueue() {
     (signal) =>
       api.centreBookings(centre.centreId, { date: selectedDate }, signal),
     [centre.centreId, selectedDate],
-    { enabled: Boolean(centre.centreId) },
+    { enabled: Boolean(centre.centreId), intervalMs: 10000 },
   );
 
   const rows = useMemo(() => bookings.data?.bookings ?? [], [bookings.data]);
