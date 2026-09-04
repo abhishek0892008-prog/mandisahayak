@@ -3,13 +3,6 @@ import { initReactI18next } from "react-i18next";
 
 import en from "./locales/en/translation.json";
 import hi from "./locales/hi/translation.json";
-import pa from "./locales/pa/translation.json";
-import mr from "./locales/mr/translation.json";
-import te from "./locales/te/translation.json";
-import bn from "./locales/bn/translation.json";
-import or from "./locales/or/translation.json";
-import ta from "./locales/ta/translation.json";
-import kn from "./locales/kn/translation.json";
 
 import { isSupportedLanguage } from "./lib/languages";
 
@@ -47,13 +40,6 @@ i18n
     resources: {
       en: { translation: en },
       hi: { translation: hi },
-      pa: { translation: pa },
-      mr: { translation: mr },
-      te: { translation: te },
-      bn: { translation: bn },
-      or: { translation: or },
-      ta: { translation: ta },
-      kn: { translation: kn },
     },
     lng: getInitialLanguage(),
     fallbackLng: "en",
