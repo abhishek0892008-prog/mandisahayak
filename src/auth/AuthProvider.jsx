@@ -7,11 +7,11 @@ import { AuthContext } from "./context";
 
 /**
  * Must match the key `src/i18n.js` reads at startup. They were previously
- * different ("fq.language" here, "farmqueueLanguage" there), so a chosen
+ * different ("fq.language" here, "mandiSahayakLanguage" there), so a chosen
  * language was written to one key and looked for under another — and the
  * preference silently failed to survive a reload.
  */
-const LANGUAGE_KEY = "farmqueueLanguage";
+const LANGUAGE_KEY = "mandiSahayakLanguage";
 
 /**
  * The only sanctioned use of localStorage in this application: a language

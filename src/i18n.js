@@ -15,7 +15,7 @@ import { isSupportedLanguage } from "./lib/languages";
 
 const getInitialLanguage = () => {
   try {
-    const stored = localStorage.getItem("farmqueueLanguage");
+    const stored = localStorage.getItem("mandiSahayakLanguage");
 
     if (isSupportedLanguage(stored)) {
       return stored;
@@ -35,7 +35,7 @@ const getInitialLanguage = () => {
  */
 export function hasStoredLanguage() {
   try {
-    return isSupportedLanguage(localStorage.getItem("farmqueueLanguage"));
+    return isSupportedLanguage(localStorage.getItem("mandiSahayakLanguage"));
   } catch {
     return false;
   }
@@ -64,7 +64,7 @@ i18n
 
 i18n.on("languageChanged", (language) => {
   try {
-    localStorage.setItem("farmqueueLanguage", language);
+    localStorage.setItem("mandiSahayakLanguage", language);
   } catch {
     return;
   }

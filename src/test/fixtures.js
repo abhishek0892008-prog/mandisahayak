@@ -323,7 +323,7 @@ export const notifications = {
 
 export const preferences = {
   defaultWhenUnset: "ENABLED",
-  note: "Every notification FarmQueue sends is transactional and about your own booking, procurement or payment.",
+  note: "Every notification Mandi Sahayak sends is transactional and about your own booking, procurement or payment.",
   preferences: [
     { channel: "IN_APP", event: "ONE_DAY_REMINDER", scope: "EVENT", enabled: false },
   ],

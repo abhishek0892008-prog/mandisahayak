@@ -1,4 +1,4 @@
-# FarmQueue — Live Demo Script (PS 26032)
+# Mandi Sahayak — Live Demo Script (PS 26032)
 
 **Duration:** 8–10 minutes
 **Rehearsed:** this exact flow was executed end-to-end against a running server on 2026-09-03. Every response below is real output, not illustration.
@@ -15,7 +15,7 @@
 ```bash
 # 1. Start PostgreSQL 17.11, then provision from zero
 export PATH="<postgres>/bin:$PATH"
-export TEST_DATABASE_URL="postgres://<user>@127.0.0.1:55432/farmqueue_test"
+export TEST_DATABASE_URL="postgres://<user>@127.0.0.1:55432/mandi-sahayak_test"
 bash server/scripts/provision-database.sh --recreate
 #   → ready: 14 migrations, 20 crops, 23 MSP rates, 5 centres, 0 bookings
 
@@ -218,7 +218,7 @@ curl -s -b $J "$B/api/v1/notifications"
 
 **Expected:** booking `COMPLETED`; farmer sees quality `ACCEPTED`, 2 480.5 kg, `PAID`, ₹64 120.93, and **5 notifications** — confirmed, arrived, procurement recorded, payment initiated, payment paid.
 
-**Say:** *"FarmQueue records that a payment was made and its reference. It does not move money — that's a deliberate scope decision, so we never collect bank details."*
+**Say:** *"Mandi Sahayak records that a payment was made and its reference. It does not move money — that's a deliberate scope decision, so we never collect bank details."*
 
 ### B10. Close on the tests (30 seconds)
 

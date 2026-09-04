@@ -1,4 +1,4 @@
-# FarmQueue — Farmer API (v1)
+# Mandi Sahayak — Farmer API (v1)
 
 **Status:** Implemented and verified against PostgreSQL 17.11 (Phase 6)
 **Base path:** `/api/v1`

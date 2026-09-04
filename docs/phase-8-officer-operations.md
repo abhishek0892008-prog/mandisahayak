@@ -1,4 +1,4 @@
-# FarmQueue — Phase 8: Officer Operations
+# Mandi Sahayak — Phase 8: Officer Operations
 
 **Status:** design document, written **before** implementation as required
 **Date:** 2026-09-02

@@ -1,4 +1,4 @@
-FarmQueue — Frontend / Backend Integration Audit
+Mandi Sahayak — Frontend / Backend Integration Audit
 Generated: 2026-09-03
 Scope: the React farmer app in src/, audited against the API in server/
 

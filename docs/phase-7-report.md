@@ -1,4 +1,4 @@
-# FarmQueue — Phase 7 Report: Booking & Scheduling Engine
+# Mandi Sahayak — Phase 7 Report: Booking & Scheduling Engine
 
 **Phase:** 7 — availability search, booking creation, cancellation
 **Date:** 2026-09-02
@@ -204,7 +204,7 @@ means *no policy configured*.
 
 ```bash
 export PATH="<postgres>/bin:$PATH"
-export TEST_DATABASE_URL="postgres://<user>@127.0.0.1:55432/farmqueue_test"
+export TEST_DATABASE_URL="postgres://<user>@127.0.0.1:55432/mandi-sahayak_test"
 
 bash server/scripts/provision-database.sh --recreate
 

@@ -1,9 +1,9 @@
-FarmQueue Frontend - Backend Readiness Audit
+Mandi Sahayak Frontend - Backend Readiness Audit
 Generated: 2026-08-30
 
 PURPOSE
 This document describes the frontend gaps and the required backend integration work
-needed to turn the current FarmQueue UI prototype into a working application.
+needed to turn the current Mandi Sahayak UI prototype into a working application.
 
 CURRENT STATUS
 - Frontend: React 19 + Vite + React Router + Tailwind + i18next.

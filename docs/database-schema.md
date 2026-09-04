@@ -1,4 +1,4 @@
-# FarmQueue — Database Schema
+# Mandi Sahayak — Database Schema
 
 **Phase:** 2 (Database + migrations)
 **Engine:** PostgreSQL 13+ (target 16)
@@ -348,7 +348,7 @@ Object counts as reported by PostgreSQL: 48 tables, 6 domains, 48 primary keys,
 
 ### Still outstanding
 
-1. **Privilege revocation on `audit_logs` was skipped.** The `farmqueue_app`
+1. **Privilege revocation on `audit_logs` was skipped.** The `mandi-sahayak_app`
    role does not exist in the verification cluster, so `0010` emitted its
    NOTICE and moved on. The three immutability triggers were still active and
    still refused every mutation, but the `REVOKE` must be applied in any real
@@ -362,7 +362,7 @@ Object counts as reported by PostgreSQL: 48 tables, 6 domains, 48 primary keys,
 **To reproduce:**
 
 ```bash
-export DATABASE_URL="postgres://<user>@<host>:<port>/farmqueue"
+export DATABASE_URL="postgres://<user>@<host>:<port>/mandi-sahayak"
 bash server/scripts/apply-migrations.sh
 psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f server/scripts/verify-schema.sql
 ```

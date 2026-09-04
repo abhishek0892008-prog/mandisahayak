@@ -1,4 +1,4 @@
-# FarmQueue — Queue and ETA API (v1)
+# Mandi Sahayak — Queue and ETA API (v1)
 
 **Status:** Implemented and verified against PostgreSQL 17.11 (Phase 9)
 **Base path:** `/api/v1`

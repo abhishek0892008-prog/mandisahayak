@@ -1,4 +1,4 @@
-# FarmQueue — Phase 10 Design Check
+# Mandi Sahayak — Phase 10 Design Check
 
 **Status:** **BLOCKED AT THE APPROVAL GATE — no implementation performed**
 **Date:** 2026-09-02
@@ -297,7 +297,7 @@ Would follow the Phase 8/9 shape: a pure renderer/threshold-evaluator engine tes
 
 | # | Value | Architecture reference | Why it cannot be chosen here |
 |---|---|---|---|
-| 1 | `approaching_position_threshold` | §16.4, §13.5 (D-4) | Determines when a farmer is told to set off. Too low, they arrive late; too high, they wait at the centre — the exact problem FarmQueue exists to remove |
+| 1 | `approaching_position_threshold` | §16.4, §13.5 (D-4) | Determines when a farmer is told to set off. Too low, they arrive late; too high, they wait at the centre — the exact problem Mandi Sahayak exists to remove |
 | 2 | `turn_threshold_minutes` | §16.4, §13.5 | Same, in time |
 | 3 | `REMINDER_SEND_HOUR_LOCAL` | §16.4, §19 | When a farmer's phone rings. A social decision |
 | 4 | Notifiable payment statuses | §16.4 `PAYMENT_UPDATED` | Which money events are worth an SMS |

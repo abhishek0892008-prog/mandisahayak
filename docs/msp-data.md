@@ -1,4 +1,4 @@
-# FarmQueue — MSP Data and Resolver Design
+# Mandi Sahayak — MSP Data and Resolver Design
 
 **Status:** **D-9 IMPLEMENTED and VERIFIED** — migration `0013_msp_identity_resolution.sql`, PostgreSQL 17.11, 2026-09-02.
 **Last updated:** 2026-09-02

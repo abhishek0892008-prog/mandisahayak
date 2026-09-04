@@ -1,4 +1,4 @@
-# FarmQueue — Phase 9: Queue and ETA Engine
+# Mandi Sahayak — Phase 9: Queue and ETA Engine
 
 **Status:** design document, written **before** implementation as required
 **Date:** 2026-09-02

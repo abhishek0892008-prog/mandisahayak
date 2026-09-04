@@ -110,7 +110,7 @@ function Login() {
 
               <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-slate-500">
                 {t("enterMobileToContinue") ||
-                  "Enter your registered mobile number to continue to your FarmQueue account."}
+                  "Enter your registered mobile number to continue to your Mandi Sahayak account."}
               </p>
             </div>
 

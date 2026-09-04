@@ -1,8 +1,8 @@
-# FarmQueue — Phase 0: Full Repository Audit
+# Mandi Sahayak — Phase 0: Full Repository Audit
 
 **Phase:** 0 (Audit only — no code, no dependencies, no data)
 **Date:** 2026-09-02
-**Repository:** `farmer-queue` (branch `main`, commit `0889e3f`)
+**Repository:** `mandi-sahayak` (branch `main`, commit `0889e3f`)
 **Status:** Awaiting approval to proceed to Phase 1
 
 ---
@@ -36,7 +36,7 @@ website was accessed, no data was imported or invented.
 
 **Git history (2 commits):**
 
-- `19944bb` — Initial FarmQueue frontend (30 files, 7217 insertions)
+- `19944bb` — Initial Mandi Sahayak frontend (30 files, 7217 insertions)
 - `0889e3f` — "todo backend" (adds `BACKEND_READINESS_AUDIT.txt`)
 
 **Dependencies (`package.json`):** React 19, react-dom 19, react-router-dom 7, Tailwind CSS 4
@@ -382,7 +382,7 @@ environment configuration. Templates should be authored to be DLT-registerable f
 ### 10.1 Repository layout — additive only
 
 ```
-farmer-queue/
+mandi-sahayak/
   src/              # existing frontend — UNTOUCHED until Phase 15
   server/           # NEW — the entire backend
     src/

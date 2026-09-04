@@ -44,7 +44,7 @@ Stated plainly so nothing in this matrix is over-read:
 1. **The React frontend is a prototype and is not connected to the API.** Every screen reads `localStorage`. The capabilities above are demonstrated through the API.
 2. **There is no officer UI.** Officer operations are API-only.
 3. **No real SMS is sent.** The outbox and provider interface are real; the adapter is DEMO.
-4. **No money moves.** FarmQueue tracks payment *status* (decision D-7); it does not disburse.
+4. **No money moves.** Mandi Sahayak tracks payment *status* (decision D-7); it does not disburse.
 5. **"Reduction of waiting time" is a mechanism, not a measurement.** No field trial has been run.
 6. **The five centres are CONFIGURED demonstration data**, not real government procurement centres.
 7. **The 23 MSP rates are OFFICIAL but single-sourced** and remain independently unverified (`last_verified_at IS NULL`).

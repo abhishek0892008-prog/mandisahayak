@@ -1,4 +1,4 @@
-# FarmQueue — Phase 10: Notifications & Farmer Status Updates
+# Mandi Sahayak — Phase 10: Notifications & Farmer Status Updates
 
 **Status:** design document, written **before** implementation
 **Date:** 2026-09-03

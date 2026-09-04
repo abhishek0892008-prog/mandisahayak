@@ -1,4 +1,4 @@
-# FarmQueue — Phase 7: Booking & Scheduling Engine
+# Mandi Sahayak — Phase 7: Booking & Scheduling Engine
 
 **Status:** design document, written **before** implementation as required
 **Date:** 2026-09-02

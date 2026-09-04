@@ -1,4 +1,4 @@
-# FarmQueue — Submission Architecture Overview
+# Mandi Sahayak — Submission Architecture Overview
 
 **Full design contract:** [`../architecture.md`](../architecture.md) (§1–§25). This is the submission summary and the diagram specification.
 

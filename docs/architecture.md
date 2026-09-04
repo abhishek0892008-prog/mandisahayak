@@ -1,11 +1,11 @@
-# FarmQueue — Backend Architecture
+# Mandi Sahayak — Backend Architecture
 
 **Phase:** 1 (Design only — no implementation)
 **Date:** 2026-09-02
 **Stack decision:** Node.js + TypeScript + PostgreSQL (approved, Q1)
 **Status:** Awaiting approval to proceed to Phase 2
 
-> This document is the design contract for the FarmQueue backend. It contains no implementation.
+> This document is the design contract for the Mandi Sahayak backend. It contains no implementation.
 > Full DDL and migrations are the Phase 2 deliverable; this document defines what those migrations
 > must express. Every design choice that needs your sign-off is collected in the
 > **Decisions Register (§20)** and every open assumption in **§21**.
@@ -77,7 +77,7 @@ the principle wins.
           └───────────────┬───────┴────────────────────┘
                           ▼
               ┌───────────────────────┐
-              │  FarmQueue API        │   Node.js + TypeScript
+              │  Mandi Sahayak API        │   Node.js + TypeScript
               │  /api/v1              │   Express, Zod, session auth
               └───┬───────────────┬───┘
                   │               │
@@ -120,7 +120,7 @@ fewer things that can fail on a stage.
 ### 2.4 Repository layout (additive — the frontend does not move)
 
 ```
-farmer-queue/
+mandi-sahayak/
   src/                        # EXISTING FRONTEND — untouched until Phase 15
   docs/
   server/                     # NEW — the entire backend
@@ -386,7 +386,7 @@ that proposal.
 
 ### 6.2 Payment scope decision (D-7)
 
-FarmQueue **tracks payment status; it does not disburse money.** Disbursement in Indian procurement
+Mandi Sahayak **tracks payment status; it does not disburse money.** Disbursement in Indian procurement
 runs through the state's own DBT/PFMS rails, not through a booking application. Therefore:
 
 - No bank account number, no account holder name, no IFSC is collected in v1.
@@ -1509,7 +1509,7 @@ explicit sign-off**; the rest are architectural and are flagged for visibility.
 | D-4 | Booking status machine reduced to 9 canonical states; `REMINDER_SENT`/`APPROACHING`/`WAITING` become derived `displayStatus` and notification facts (§13.5) | **Needs sign-off** |
 | D-5 | Time-window capacity with per-centre service lanes, enforced by a PostgreSQL `EXCLUDE` constraint; fixed hourly buckets discarded | **Approved by you** (slot instruction) |
 | D-6 | **Aadhaar last-4 and bank IFSC are removed from registration.** Neither is necessary; the first verifies nothing and the second cannot pay (§6.1) | **Needs sign-off** |
-| D-7 | FarmQueue tracks payment **status**; it does not disburse. No bank details are collected in v1 (§6.2) | **Needs sign-off** |
+| D-7 | Mandi Sahayak tracks payment **status**; it does not disburse. No bank details are collected in v1 (§6.2) | **Needs sign-off** |
 | D-8 | Per-centre `storage_check_mode` (`DISABLED`/`ADVISORY`/`ENFORCED`), default `ADVISORY`, because centre-level storage data is expected to be unavailable (§10.4) | **Needs sign-off** |
 | D-9 | MSP stored per quintal exactly as published; per-kg derived at calculation time only | Proposed |
 | D-10 | Transactional outbox + `UNIQUE` dedupe key for all notifications; only the worker evaluates thresholds | Proposed |

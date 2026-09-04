@@ -1,4 +1,4 @@
-# FarmQueue — Admin API (v1)
+# Mandi Sahayak — Admin API (v1)
 
 **Status:** Implemented and verified against PostgreSQL 17.11 (Phases 13 and 14)
 **Base path:** `/api/v1`

@@ -1,4 +1,4 @@
-# FarmQueue — Phase 9 Report: Queue and ETA Engine
+# Mandi Sahayak — Phase 9 Report: Queue and ETA Engine
 
 **Phase:** 9 — live queue projection, queue position, evidence-based ETA
 **Date:** 2026-09-02

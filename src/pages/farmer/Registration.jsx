@@ -135,7 +135,7 @@ function Registration() {
 
             <span>
               <span className="block text-lg font-extrabold tracking-tight">
-                FarmQueue
+                Mandi Sahayak
               </span>
 
               <span className="hidden text-xs font-medium text-white/80 sm:block">

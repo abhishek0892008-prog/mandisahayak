@@ -1,6 +1,6 @@
-# FarmQueue backend
+# Mandi Sahayak backend
 
-Node.js + TypeScript + PostgreSQL backend for FarmQueue.
+Node.js + TypeScript + PostgreSQL backend for Mandi Sahayak.
 Design contract: [`../docs/architecture.md`](../docs/architecture.md).
 Schema reference: [`../docs/database-schema.md`](../docs/database-schema.md).
 
