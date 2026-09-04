@@ -87,6 +87,11 @@ function OfficerPortal() {
               <p className="mt-1 truncate text-sm font-semibold text-white/85">
                 Namaste, {farmer?.fullName ?? "Officer"}
               </p>
+              {centre.selected && (
+                <p className="mt-1 truncate text-sm font-semibold text-white/85">
+                  🏪 {centre.selected.name}
+                </p>
+              )}
             </div>
 
             <div className="flex shrink-0 items-center gap-2">
