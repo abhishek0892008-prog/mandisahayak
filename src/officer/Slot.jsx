@@ -14,18 +14,18 @@ export const Slot = ({
   const getActionLabel = () => {
     switch (farmer.status) {
       case "Queued":
-        return "Arrived";
+        return "🚶 Arrived";
       case "Arrived":
       case "Weighing":
       case "Quality check":
       case "Recorded":
-        return "Weigh";
+        return "⚖️ Weigh";
       case "Awaiting payment":
-        return "Pay";
+        return "💸 Pay";
       case "Cleared":
-        return "Done";
+        return "✅ Done";
       default:
-        return "Arrived";
+        return "🚶 Arrived";
     }
   };
 

@@ -117,14 +117,8 @@ describe("OfficerPortal", () => {
       path: "/officer/*",
     });
 
-    const search = await screen.findByPlaceholderText(
-      "Enter token number or phone",
-    );
-
-    await userEvent.type(search, "7");
-    await userEvent.click(screen.getByRole("button", { name: "Search" }));
     await userEvent.click(
-      await screen.findByRole("button", { name: "Mark Arrived" }),
+      await screen.findByRole("button", { name: /arrived/i }),
     );
 
     await waitFor(() =>
@@ -161,14 +155,8 @@ describe("OfficerPortal", () => {
       path: "/officer/*",
     });
 
-    const search = await screen.findByPlaceholderText(
-      "Enter token number or phone",
-    );
-
-    await userEvent.type(search, "7");
-    await userEvent.click(screen.getByRole("button", { name: "Search" }));
     await userEvent.click(
-      await screen.findByRole("button", { name: "Mark Arrived" }),
+      await screen.findByRole("button", { name: /arrived/i }),
     );
 
     expect(

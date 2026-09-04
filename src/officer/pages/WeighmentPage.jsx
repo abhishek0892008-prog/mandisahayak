@@ -218,7 +218,7 @@ const WeighmentPage = ({ farmers = [], onUpdateFarmer, onSaveReport }) => {
           onClick={handleSave}
           className="rounded-full bg-green-700 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-200 hover:bg-green-800"
         >
-          Save weighment report
+          ⚖️ Save weighment report
         </button>
       </div>
 

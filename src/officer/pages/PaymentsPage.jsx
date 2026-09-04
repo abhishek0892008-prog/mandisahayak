@@ -184,7 +184,7 @@ const PaymentsPage = ({
                                 : "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100",
                             ].join(" ")}
                           >
-                            {status}
+                            {status === "Cleared" ? "✅" : "⏳"} {status}
                           </button>
                         );
                       })}

@@ -142,7 +142,7 @@ const DashboardPage = ({
           }
           className="rounded-full bg-green-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-green-800"
         >
-          Refresh dashboard
+          🔄 Refresh dashboard
         </button>
       </div>
 
@@ -290,7 +290,7 @@ const DashboardPage = ({
             onClick={handleDashboardSearch}
             className="rounded-full bg-green-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-green-800"
           >
-            Search
+            🔍 Search
           </button>
         </div>
 

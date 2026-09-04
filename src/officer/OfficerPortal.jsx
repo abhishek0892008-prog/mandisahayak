@@ -11,15 +11,13 @@ import QueuePage from "./pages/QueuePage";
 import WeighmentPage from "./pages/WeighmentPage";
 import PaymentsPage from "./pages/PaymentsPage";
 import ReportsPage from "./pages/ReportsPage";
-import StoragePage from "./pages/StoragePage";
 
 const NAV_ITEMS = [
-  { label: "Dashboard", to: "/officer", end: true },
-  { label: "Queue", to: "/officer/queue" },
-  { label: "Weighment", to: "/officer/weighment" },
-  { label: "Payments", to: "/officer/payments" },
-  { label: "Reports", to: "/officer/reports" },
-  { label: "Storage", to: "/officer/storage" },
+  { label: "Dashboard", symbol: "▦", to: "/officer", end: true },
+  { label: "Queue", symbol: "☰", to: "/officer/queue" },
+  { label: "Weighment", symbol: "⚖", to: "/officer/weighment" },
+  { label: "Payments", symbol: "₹", to: "/officer/payments" },
+  { label: "Reports", symbol: "▤", to: "/officer/reports" },
 ];
 
 const navClass = ({ isActive }) =>
@@ -60,7 +58,6 @@ function OfficerPortal() {
     handleDateChange,
     handlePaymentStatusChange,
     updateFarmer,
-    verifyFarmer,
     markFarmerArrived,
   } = useOfficerQueue();
 
@@ -95,20 +92,34 @@ function OfficerPortal() {
             </div>
 
             <div className="flex shrink-0 items-center gap-2">
+              <label className="flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3 py-2 text-sm font-semibold text-white">
+                <span className="text-xs uppercase tracking-[0.14em] text-white/70">
+                  Date
+                </span>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(event) => handleDateChange?.(event.target.value)}
+                  className="scheme-dark bg-transparent text-sm font-semibold text-white outline-none"
+                />
+              </label>
               <LanguageToggle />
               <button
                 type="button"
                 onClick={handleSignOut}
                 className="rounded-full border border-white/25 bg-white/10 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
               >
-                Sign out
+                ⏻ Sign out
               </button>
             </div>
           </div>
 
           <nav className="flex flex-nowrap gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:gap-3 sm:overflow-visible sm:pb-0">
-            {NAV_ITEMS.map(({ label, to, end }) => (
+            {NAV_ITEMS.map(({ label, symbol, to, end }) => (
               <NavLink key={label} to={to} end={end} className={navClass}>
+                <span aria-hidden="true" className="mr-1.5">
+                  {symbol}
+                </span>
                 {label}
               </NavLink>
             ))}
@@ -179,11 +190,8 @@ function OfficerPortal() {
                 element={
                   <QueuePage
                     farmers={farmers}
-                    selectedDate={selectedDate}
                     morningSetup={morningSetup}
-                    onDateChange={handleDateChange}
                     onUpdateFarmer={updateFarmer}
-                    onVerifyFarmer={verifyFarmer}
                     onMarkArrived={markFarmerArrived}
                   />
                 }
@@ -220,14 +228,6 @@ function OfficerPortal() {
                     onAcknowledgeSavedReport={acknowledgeSavedReport}
                     onUpdateFarmer={updateFarmer}
                     onSaveReport={saveFarmerReport}
-                  />
-                }
-              />
-              <Route
-                path="storage"
-                element={
-                  <StoragePage
-                    storage={storage}
                   />
                 }
               />

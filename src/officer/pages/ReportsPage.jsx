@@ -198,7 +198,7 @@ const ReportsPage = ({
               onClick={() => onAcknowledgeSavedReport?.()}
               className="mt-4 w-full rounded-full bg-green-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-green-800"
             >
-              OK
+              ✅ OK
             </button>
           </div>
         </div>
@@ -218,7 +218,7 @@ const ReportsPage = ({
             </p>
           </div>
           <button className="rounded-full border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-900 hover:bg-emerald-100">
-            Export PDF
+            📄 Export PDF
           </button>
         </div>
 
