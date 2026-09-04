@@ -1,4 +1,4 @@
-# FarmQueue — Phase 5: Authentication & Authorization
+# Mandi Sahayak — Phase 5: Authentication & Authorization
 
 **Status:** **COMPLETE — VERIFIED** against PostgreSQL 17.11
 **Date:** 2026-09-02
@@ -160,7 +160,7 @@ PostgreSQL `17.11 on x86_64-windows` (`server_version_num` 170011).
 3. **Registration reveals whether a phone is registered** (`409`). A disclosed trade-off: registration needs a usable duplicate path, and it is rate-limited to 3/phone/15 min and 10/IP/hour. **Login is fully enumeration-resistant**, which is the more sensitive surface. Say the word and I will make registration opaque too.
 4. **No officer/admin provisioning API.** Staff are created directly in the database (the test helper does this). Admin-managed officer creation is Phase 14.
 5. **No password rotation, reset or lockout beyond rate limiting.**
-6. `audit_logs` privilege `REVOKE` still skipped — the `farmqueue_app` role does not exist in the verification cluster. The three immutability triggers are active and verified regardless.
+6. `audit_logs` privilege `REVOKE` still skipped — the `mandi-sahayak_app` role does not exist in the verification cluster. The three immutability triggers are active and verified regardless.
 7. **The verification database is ephemeral.**
 8. **CORS is not configured** — the design assumes the frontend is served same-origin behind one reverse proxy, with a Vite dev proxy locally.
 
@@ -183,13 +183,13 @@ PostgreSQL `17.11 on x86_64-windows` (`server_version_num` 170011).
 ```bash
 cd server && npm install
 
-export DATABASE_URL="postgres://user@host:5432/farmqueue"
+export DATABASE_URL="postgres://user@host:5432/mandi-sahayak"
 export OTP_PEPPER="…" SESSION_PEPPER="…" CSRF_PEPPER="…"   # each ≥16 chars, required
 export DEMO_MODE=true DEV_TOOLS_TOKEN="…"                   # optional, dev only
 
 npm start          # refuses to boot if any route lacks a permission
 npm run typecheck
-TEST_DATABASE_URL="postgres://user@host:5432/farmqueue_test" npm test
+TEST_DATABASE_URL="postgres://user@host:5432/mandi-sahayak_test" npm test
 ```
 
 Contract for the frontend team: **`docs/api/authentication.md`**.

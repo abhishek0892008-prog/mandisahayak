@@ -1,4 +1,4 @@
-# FarmQueue — Phase 4 Report
+# Mandi Sahayak — Phase 4 Report
 
 **Phase:** 4 — Procurement centres, mandi relationships, storage, operational configuration
 **Date:** 2026-09-02
@@ -298,7 +298,7 @@ sitting in the data layer.
 ## 9. How to reproduce
 
 ```bash
-export DATABASE_URL="postgres://<user>@<host>:<port>/farmqueue"
+export DATABASE_URL="postgres://<user>@<host>:<port>/mandi-sahayak"
 A=<uuid-of-an-admin-user>
 
 bash server/scripts/apply-migrations.sh

@@ -1,4 +1,4 @@
-# FarmQueue — Phase 3 Report
+# Mandi Sahayak — Phase 3 Report
 
 **Phase:** 3 — Real PostgreSQL verification + official government-source research
 **Date:** 2026-09-02
@@ -24,7 +24,7 @@
 | Port | `55432` (non-default), `listen_addresses=127.0.0.1` only |
 | Data directory | Temporary, inside the session scratchpad |
 | Auth | `trust`, loopback only — the cluster is unreachable from outside this machine |
-| Database | `farmqueue_verify` |
+| Database | `mandi-sahayak_verify` |
 | `btree_gist` | **1.7, installed and working** |
 | `pgcrypto` | **Not installed and not required** — `gen_random_uuid()` is core from PG13; confirmed working without it |
 
@@ -82,7 +82,7 @@ One fix was made to a **new Phase 3 import file** (not a migration) — see B.4.
 ### A.5 Outstanding from Part A
 
 1. **`audit_logs` privilege revocation was skipped.** `0010` looks for a
-   `farmqueue_app` role, which does not exist in the verification cluster, so it
+   `mandi-sahayak_app` role, which does not exist in the verification cluster, so it
    emitted its NOTICE and continued. The three immutability triggers were active
    and refused every mutation regardless, but the `REVOKE` must be applied in a
    real deployment once the role exists. **UNVERIFIED in production form.**
@@ -321,7 +321,7 @@ unavailable; **no example value substituted for any of them**.
    `verified_at` is NULL on all 23 rows by design.
 3. MSP **effective periods are not published**; `effective_from` uses the Cabinet
    approval date and date-based lookups behave accordingly (B.6).
-4. The `audit_logs` privilege `REVOKE` was skipped because the `farmqueue_app`
+4. The `audit_logs` privilege `REVOKE` was skipped because the `mandi-sahayak_app`
    role does not exist in the verification cluster.
 5. Index performance unmeasured.
 

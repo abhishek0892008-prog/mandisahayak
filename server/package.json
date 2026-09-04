@@ -1,9 +1,9 @@
 {
-  "name": "farmqueue-server",
+  "name": "mandi-sahayak-server",
   "private": true,
   "version": "0.14.0",
   "type": "module",
-  "description": "FarmQueue backend — Phase 14: officer provisioning. Notifications are DEMO delivery only.",
+  "description": "Mandi Sahayak backend — Phase 14: officer provisioning. Notifications are DEMO delivery only.",
   "engines": {
     "node": ">=22.18"
   },

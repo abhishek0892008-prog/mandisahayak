@@ -1,5 +1,5 @@
 {
-  "appName": "FarmQueue",
+  "appName": "Mandi Sahayak",
   "welcome": "स्वागत आहे",
   "namasteFarmer": "नमस्कार",
   "farmer": "शेतकरी",
@@ -130,7 +130,7 @@
   "settings": "सेटिंग्ज",
   "language": "भाषा",
   "logout": "लॉग आउट",
-  "logoutDescription": "तुमच्या FarmQueue खात्यातून साइन आउट करा",
+  "logoutDescription": "तुमच्या Mandi Sahayak खात्यातून साइन आउट करा",
   "logoutConfirmTitle": "लॉग आउट करायचे?",
   "logoutConfirmDescription": "तुम्हाला खात्री आहे की तुम्हाला तुमच्या खात्यातून लॉग आउट करायचे आहे?",
   "cancel": "रद्द करा",

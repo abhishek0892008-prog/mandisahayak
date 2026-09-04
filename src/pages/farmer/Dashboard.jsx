@@ -105,17 +105,11 @@ function Dashboard() {
 
   return (
     <FarmerLayout
-      title={t("namasteFarmer")}
+      title={`${t("namasteFarmer")}, ${farmer?.fullName ?? t("farmer")}`}
       headerExtra={
         <div className="mt-5">
-          <p className="text-sm text-green-100">{t("welcome")}</p>
-
-          <h2 className="mt-1 text-2xl font-bold">
-            {farmer?.fullName ?? t("farmer")}
-          </h2>
-
           {farmer?.district?.name && (
-            <p className="mt-1 text-sm text-green-100">
+            <p className="text-sm text-white">
               📍{" "}
               {[farmer.village?.name, farmer.district.name]
                 .filter(Boolean)
@@ -288,8 +282,8 @@ function Dashboard() {
       {!bookings.initialLoading &&
         !bookings.error &&
         !current && (
-          <section className="rounded-3xl bg-white p-6 text-center shadow-sm">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-green-50 text-3xl">
+          <section className="rounded-[26px] border border-emerald-200 bg-emerald-50/60 p-6 text-center shadow-sm shadow-emerald-200/30">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-3xl">
               📅
             </div>
 
@@ -315,10 +309,10 @@ function Dashboard() {
         <button
           type="button"
           onClick={() => navigate("/my-booking")}
-          className="mt-3 flex w-full items-center justify-between rounded-2xl border border-green-100 bg-green-50 px-4 py-3 text-left"
+          className="mt-3 flex w-full items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 text-left"
         >
           <div>
-            <p className="text-xs font-semibold text-green-700">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700">
               {active.length} {t("records")}
             </p>
 
@@ -327,19 +321,19 @@ function Dashboard() {
             </p>
           </div>
 
-          <span className="text-green-700">→</span>
+          <span className="text-emerald-700">→</span>
         </button>
       )}
 
       <section className="mt-6">
         <div className="mb-4">
-          <h2 className="text-lg font-bold text-slate-900">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-700">
             {t("services")}
-          </h2>
-
-          <p className="mt-1 text-sm text-slate-500">
-            {t("chooseWhatYouNeed")}
           </p>
+
+          <h2 className="mt-1 text-lg font-bold text-slate-900">
+            {t("chooseWhatYouNeed")}
+          </h2>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -348,7 +342,7 @@ function Dashboard() {
               key={service.path}
               type="button"
               onClick={() => navigate(service.path)}
-              className="relative rounded-2xl bg-white p-4 text-left shadow-sm transition hover:shadow-md active:scale-[0.98]"
+              className="relative rounded-2xl border border-emerald-200 bg-white p-4 text-left shadow-sm shadow-emerald-200/30 transition hover:shadow-md active:scale-[0.98]"
             >
               <div
                 className={`flex h-11 w-11 items-center justify-center rounded-xl text-xl ${service.tint}`}
@@ -375,9 +369,9 @@ function Dashboard() {
         </div>
       </section>
 
-      <section className="mt-5 rounded-2xl bg-white p-4 shadow-sm">
+      <section className="mt-5 rounded-[26px] border border-emerald-200 bg-emerald-50/60 p-4">
         <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-green-50 text-lg">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-lg">
             ℹ️
           </div>
 
@@ -394,7 +388,7 @@ function Dashboard() {
       </section>
 
       {current && (
-        <div className="mt-5 flex items-center justify-between gap-3 rounded-2xl bg-white p-4 shadow-sm">
+        <div className="mt-5 flex items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm shadow-emerald-200/30">
           <StatusBadge
             status={current.status}
             label={translateDisplayStatus(
@@ -410,7 +404,7 @@ function Dashboard() {
               queue.reload();
               unread.reload();
             }}
-            className="text-sm font-semibold text-green-700 hover:underline"
+            className="text-sm font-semibold text-emerald-700 hover:underline"
           >
             {t("refresh")}
           </button>

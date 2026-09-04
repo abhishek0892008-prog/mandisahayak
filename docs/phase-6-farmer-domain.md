@@ -1,4 +1,4 @@
-# FarmQueue — Phase 6: Farmer Domain & Frontend API Contract
+# Mandi Sahayak — Phase 6: Farmer Domain & Frontend API Contract
 
 **Status:** **COMPLETE — VERIFIED** against PostgreSQL 17.11
 **Date:** 2026-09-02

@@ -1,4 +1,4 @@
-# FarmQueue — Phase 6: Frontend Expectation vs Backend Authoritative Model
+# Mandi Sahayak — Phase 6: Frontend Expectation vs Backend Authoritative Model
 
 **Date:** 2026-09-02
 **Method:** re-read of `main`'s eleven farmer pages and the locale bundles, plus a

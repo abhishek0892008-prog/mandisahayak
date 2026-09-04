@@ -167,7 +167,7 @@ function MyBooking() {
                 },
               })
             }
-            className="rounded-xl bg-[#0b7f43] px-3 py-3 text-xs font-semibold text-white transition hover:bg-[#096b39]"
+            className="rounded-xl bg-[#15803d] px-3 py-3 text-xs font-semibold text-white transition hover:bg-[#166534]"
           >
             {t("queueStatus")}
           </button>
@@ -236,7 +236,7 @@ function MyBooking() {
                 <button
                   type="button"
                   onClick={() => navigate("/book-slot")}
-                  className="mt-5 w-full rounded-xl bg-[#0b7f43] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#096b39]"
+                  className="mt-5 w-full rounded-xl bg-[#15803d] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#166534]"
                 >
                   {t("bookSlot")} →
                 </button>

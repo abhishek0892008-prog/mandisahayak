@@ -1,4 +1,4 @@
-# FarmQueue — Authentication & Authorization API (v1)
+# Mandi Sahayak — Authentication & Authorization API (v1)
 
 **Status:** Implemented and verified against PostgreSQL 17.11 (Phase 5)
 **Base path:** `/api/v1`

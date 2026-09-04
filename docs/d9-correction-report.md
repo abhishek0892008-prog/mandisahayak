@@ -1,4 +1,4 @@
-# FarmQueue — D-9 Correction Report
+# Mandi Sahayak — D-9 Correction Report
 
 **Task:** Implement the approved D-9 correction to MSP identity and effective period
 **Date:** 2026-09-02
@@ -256,7 +256,7 @@ files only `.gitignore` remains modified, from Phase 3.
 ## 10. Reproducing
 
 ```bash
-export DATABASE_URL="postgres://<user>@<host>:<port>/farmqueue"
+export DATABASE_URL="postgres://<user>@<host>:<port>/mandi-sahayak"
 A=<uuid-of-an-admin-user>
 
 bash server/scripts/apply-migrations.sh

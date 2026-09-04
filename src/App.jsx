@@ -20,11 +20,7 @@ import Profile from "./pages/farmer/Profile";
 
 import OfficerLogin from "./pages/officer/OfficerLogin";
 import OfficerRegistration from "./pages/officer/OfficerRegistration";
-import OfficerToday from "./pages/officer/OfficerToday";
-import GateEntryPage from "./pages/officer/GateEntryPage";
-import WeighmentPage from "./pages/officer/WeighmentPage";
-import OfficerPayments from "./pages/officer/PaymentsPage";
-import OfficerReports from "./pages/officer/ReportsPage";
+import OfficerPortal from "./officer/OfficerPortal";
 
 import LanguageSelect from "./pages/LanguageSelect";
 import PortalSelect from "./pages/PortalSelect";
@@ -79,11 +75,7 @@ function App() {
 
             {/* Officer portal */}
             <Route element={<ProtectedRoute role={OFFICER} />}>
-              <Route path="/officer" element={<OfficerToday />} />
-              <Route path="/officer/gate" element={<GateEntryPage />} />
-              <Route path="/officer/weighment" element={<WeighmentPage />} />
-              <Route path="/officer/payments" element={<OfficerPayments />} />
-              <Route path="/officer/reports" element={<OfficerReports />} />
+              <Route path="/officer/*" element={<OfficerPortal />} />
             </Route>
 
             <Route path="*" element={<NotFound />} />

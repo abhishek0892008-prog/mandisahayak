@@ -49,8 +49,8 @@ export function FarmerLayout({
               )}
 
               <div className="min-w-0">
-                <p className="text-xs text-green-100">{t("appName")}</p>
-                <h1 className="truncate text-lg font-bold">{title}</h1>
+                <p className="text-lg font-bold text-white">{t("appName")}</p>
+                <h1 className="truncate text-lg font-bold text-white">{title}</h1>
               </div>
             </div>
 

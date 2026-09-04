@@ -1,4 +1,4 @@
-# FarmQueue — Limitations, Data Provenance & Honest Claims
+# Mandi Sahayak — Limitations, Data Provenance & Honest Claims
 
 **Date:** 2026-09-03
 
@@ -8,7 +8,7 @@ This document exists so that nothing in the submission or the demo is over-claim
 
 ## 1. Data classification
 
-FarmQueue enforces a three-way distinction in the database itself (`data_type` columns and `data_sources` provenance).
+Mandi Sahayak enforces a three-way distinction in the database itself (`data_type` columns and `data_sources` provenance).
 
 | Entity | Example | Classification | Safe to show? | Notes |
 |---|---|---|---|---|
@@ -30,7 +30,7 @@ FarmQueue enforces a three-way distinction in the database itself (`data_type` c
 
 ## 2. Notification status — the exact wording
 
-> **FarmQueue implements a transactional, provider-neutral notification/outbox architecture with a DEMO delivery adapter. Real SMS provider integration is not configured.**
+> **Mandi Sahayak implements a transactional, provider-neutral notification/outbox architecture with a DEMO delivery adapter. Real SMS provider integration is not configured.**
 
 | | Reality |
 |---|---|
@@ -48,7 +48,7 @@ FarmQueue enforces a three-way distinction in the database itself (`data_type` c
 
 ## 3. Payment status — what is and is not claimed
 
-FarmQueue **tracks payment status. It does not disburse money** (decision D-7).
+Mandi Sahayak **tracks payment status. It does not disburse money** (decision D-7).
 
 - No bank details are collected — deliberately, so the project never holds them.
 - `PAID` means an officer recorded a payment reference (e.g. a UTR) from an external system.

@@ -1,10 +1,10 @@
-# FarmQueue
+# Mandi Sahayak
 
 **Smart India Hackathon — PS 26032**
 
 > *"Farmers often face long waiting times, lack of information regarding procurement schedules and uncertainty about procurement status."*
 
-FarmQueue is a slot-booking and queue-management system for agricultural procurement centres. A farmer books a time window sized to the quantity they are actually bringing, sees where they are in the queue, and can follow their produce from arrival through weighing, quality assessment, MSP-based pricing and payment status — without standing in a line to find out.
+Mandi Sahayak is a slot-booking and queue-management system for agricultural procurement centres. A farmer books a time window sized to the quantity they are actually bringing, sees where they are in the queue, and can follow their produce from arrival through weighing, quality assessment, MSP-based pricing and payment status — without standing in a line to find out.
 
 ---
 
@@ -83,7 +83,7 @@ Requires Node ≥ 22.18 and PostgreSQL 17.
   its centre is linked to none.
 - The 23 MSP rates are **OFFICIAL** (PIB Cabinet releases, 2026-27) with full provenance, and are **single-sourced and not independently cross-checked** (`last_verified_at IS NULL`).
 - **No real SMS is sent.** The outbox and provider interface are real; delivery is a DEMO adapter.
-- **No money moves.** FarmQueue records payment status and references; it does not disburse, and collects no bank details.
+- **No money moves.** Mandi Sahayak records payment status and references; it does not disburse, and collects no bank details.
 - No Aadhaar and no bank details are collected anywhere.
 
 Details in [`docs/submission/limitations.md`](docs/submission/limitations.md).

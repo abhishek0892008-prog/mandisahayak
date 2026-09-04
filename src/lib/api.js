@@ -1,5 +1,5 @@
 /**
- * FarmQueue API client.
+ * Mandi Sahayak API client.
  *
  * Contract: docs/api/authentication.md §1.
  *

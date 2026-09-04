@@ -332,7 +332,7 @@ export async function getPreferences(userId: string) {
   return {
     // Stated explicitly so a client never has to guess what an absent row means.
     defaultWhenUnset: 'ENABLED',
-    note: 'Every notification FarmQueue sends is transactional and about your own booking, procurement or payment.',
+    note: 'Every notification Mandi Sahayak sends is transactional and about your own booking, procurement or payment.',
     preferences: rows.map((r) => ({
       channel: r.channel,
       event: r.event_key,

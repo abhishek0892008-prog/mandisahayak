@@ -1,5 +1,5 @@
 {
-  "appName": "FarmQueue",
+  "appName": "Mandi Sahayak",
   "welcome": "స్వాగతం",
   "namasteFarmer": "నమస్కారం",
   "farmer": "రైతు",
@@ -130,7 +130,7 @@
   "settings": "సెట్టింగ్‌లు",
   "language": "భాష",
   "logout": "లాగ్ అవుట్",
-  "logoutDescription": "మీ FarmQueue ఖాతా నుండి సైన్ అవుట్ చేయండి",
+  "logoutDescription": "మీ Mandi Sahayak ఖాతా నుండి సైన్ అవుట్ చేయండి",
   "logoutConfirmTitle": "లాగ్ అవుట్ చేయాలా?",
   "logoutConfirmDescription": "మీరు నిజంగా మీ ఖాతా నుండి లాగ్ అవుట్ చేయాలనుకుంటున్నారా?",
   "cancel": "రద్దు చేయండి",

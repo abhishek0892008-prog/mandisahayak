@@ -1,4 +1,4 @@
-# FarmQueue — Phase 10 Roadmap Recovery Audit
+# Mandi Sahayak — Phase 10 Roadmap Recovery Audit
 
 # STATUS: BLOCKED — NO AUTHORITATIVE PHASE 10 DEFINITION
 
@@ -102,7 +102,7 @@ Applying the required classification:
 | Class | Present? | Detail |
 |---|---|---|
 | **A — Explicit authoritative requirement** | **NO** | No requirements document, statement of work, or numbered plan exists anywhere in the repository or its history |
-| **B — Architecture / design decision** | **NO for Phase 10** | `docs/architecture.md` calls itself *"the design contract for the FarmQueue backend"* and contains §1–§25 plus decision registers D-1…D-11 and A-1…A-10. **It never mentions Phase 10, Phase 11 or Phase 12.** It names only Phase 13, 15 and 17, and then only in passing |
+| **B — Architecture / design decision** | **NO for Phase 10** | `docs/architecture.md` calls itself *"the design contract for the Mandi Sahayak backend"* and contains §1–§25 plus decision registers D-1…D-11 and A-1…A-10. **It never mentions Phase 10, Phase 11 or Phase 12.** It names only Phase 13, 15 and 17, and then only in passing |
 | **C — Phase report** | **YES — all seven scope-bearing references** | Both candidates rest entirely on phase reports |
 | **D — Historical implementation note** | **YES** | `rbac.ts:140`, `0009_messaging.sql:13`, `.env.example:44`, `otp.service.ts:44` |
 | **E — Experimental / branch-specific** | none | `faramqueue-feature` contains frontend files only |
@@ -125,7 +125,7 @@ Four reasons no source can be promoted to authoritative:
 - **`docs/` and `server/` have never been committed.** `git log --all --pretty=format: --name-only` contains no path under either. All backend code and all phase documentation are untracked.
 - **Nothing has ever been deleted.** `--diff-filter=D` across all refs returns empty. **No deleted roadmap document exists to recover.**
 - **Six commits exist in total**, all frontend-only:
-  - `main`: `19944bb` Initial FarmQueue frontend → `0889e3f` todo backend → `158166a` Improve farmer portal and booking flow → `e8b2b16` Improve procurement capacity information
+  - `main`: `19944bb` Initial Mandi Sahayak frontend → `0889e3f` todo backend → `158166a` Improve farmer portal and booking flow → `e8b2b16` Improve procurement capacity information
   - `origin/faramqueue-feature`: `4e8ef4d` Initial commit for Faramqueue app → `f1a0403` Fix empty queue state and sample slots
 - **Reflog** shows one clone and one `pull --tags origin main` fast-forward, `0889e3f → e8b2b16`. No rewritten or lost history.
 - **Tracked non-frontend files** are `README.md` (stock Vite template, no roadmap) and `BACKEND_READINESS_AUDIT.txt` (frontend gap analysis, no phase numbering).

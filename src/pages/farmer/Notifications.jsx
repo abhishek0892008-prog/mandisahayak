@@ -91,7 +91,7 @@ function Notifications() {
           onClick={() =>
             setShowPreferences((value) => !value)
           }
-          className="text-sm font-semibold text-[#0b7f43] transition hover:underline"
+          className="text-sm font-semibold text-[#15803d] transition hover:underline"
         >
           {showPreferences
             ? t("backToNotifications")
@@ -111,7 +111,7 @@ function Notifications() {
               }
               className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
                 unreadOnly
-                  ? "bg-[#0b7f43] text-white"
+                  ? "bg-[#15803d] text-white"
                   : "bg-white text-slate-600 shadow-sm"
               }`}
             >
@@ -128,7 +128,7 @@ function Notifications() {
                 type="button"
                 onClick={markAllRead}
                 disabled={busy === "all"}
-                className="text-sm font-semibold text-[#0b7f43] transition hover:underline disabled:text-slate-400"
+                className="text-sm font-semibold text-[#15803d] transition hover:underline disabled:text-slate-400"
               >
                 {t("markAllRead")}
               </button>
@@ -183,7 +183,7 @@ function Notifications() {
 
                       <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-2">
-                          <p className="text-xs font-semibold uppercase tracking-wide text-[#0b7f43]">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-[#15803d]">
                             {translateNotificationType(
                               t,
                               item.type,
@@ -227,7 +227,7 @@ function Notifications() {
                                 markRead(item.id)
                               }
                               disabled={busy === item.id}
-                              className="rounded-lg bg-[#0b7f43] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#096b39] disabled:bg-green-300"
+                              className="rounded-lg bg-[#15803d] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#166534] disabled:bg-green-300"
                             >
                               {t("markRead")}
                             </button>

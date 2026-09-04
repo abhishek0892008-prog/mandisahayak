@@ -1,4 +1,4 @@
-# FarmQueue — Phase 10 Report: Notifications & Farmer Status Updates
+# Mandi Sahayak — Phase 10 Report: Notifications & Farmer Status Updates
 
 **Phase:** 10 — notification outbox, farmer status updates, DEMO delivery
 **Date:** 2026-09-03

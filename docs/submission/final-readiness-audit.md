@@ -1,4 +1,4 @@
-# FarmQueue — Final Submission Readiness Audit
+# Mandi Sahayak — Final Submission Readiness Audit
 
 **Date:** 2026-09-03
 **Problem statement:** PS 26032
