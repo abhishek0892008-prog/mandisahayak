@@ -25,7 +25,7 @@ export type ChallengeView = {
    * DEMO ONLY. The OTP that was just issued, echoed so a demo can be completed
    * without an SMS provider. Absent unless DEMO_MODE is on — see attachDemoOtp.
    */
-  devOtp?: string;
+  devOtp?: string | null;
 };
 
 /**
