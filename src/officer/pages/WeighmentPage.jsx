@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 const WeighmentPage = ({ farmers = [], onUpdateFarmer, onSaveReport }) => {
   const [selectedFarmerId, setSelectedFarmerId] = useState(null);
@@ -7,7 +7,9 @@ const WeighmentPage = ({ farmers = [], onUpdateFarmer, onSaveReport }) => {
     () =>
       farmers.filter(
         (farmer) =>
-          ["Arrived", "Weighing"].includes(farmer.status) &&
+          ["Arrived", "Weighing", "Quality check", "Recorded"].includes(
+            farmer.status,
+          ) &&
           !farmer.reportSaved,
       ),
     [farmers],
@@ -28,12 +30,6 @@ const WeighmentPage = ({ farmers = [], onUpdateFarmer, onSaveReport }) => {
       activeFarmers[0]
     );
   }, [activeFarmers, selectedFarmerId]);
-
-  useEffect(() => {
-    if (selectedFarmer?.status === "Arrived") {
-      onUpdateFarmer?.(selectedFarmer.id, "status", "Weighing");
-    }
-  }, [onUpdateFarmer, selectedFarmer]);
 
   const gross = Number(selectedFarmer?.grossWeight ?? 0);
   const tare = Number(selectedFarmer?.tareWeight ?? 0);

@@ -2,9 +2,9 @@ import { useNavigate } from "react-router-dom";
 
 export const Slot = ({
   farmer,
+  onMarkArrived,
   isHighlighted = false,
   onUpdateFarmer,
-  onClearFarmer,
 }) => {
   const navigate = useNavigate();
   const cardClass = isHighlighted
@@ -17,12 +17,13 @@ export const Slot = ({
         return "Arrived";
       case "Arrived":
       case "Weighing":
+      case "Quality check":
+      case "Recorded":
         return "Weigh";
-      case "Payment":
-      case "Payment pending":
+      case "Awaiting payment":
         return "Pay";
       case "Cleared":
-        return "Clear";
+        return "Done";
       default:
         return "Arrived";
     }
@@ -31,18 +32,16 @@ export const Slot = ({
   const handlePrimaryAction = () => {
     switch (farmer.status) {
       case "Queued":
-        onUpdateFarmer?.(farmer.id, "status", "Arrived");
+        onMarkArrived?.(farmer.id);
         return;
       case "Arrived":
       case "Weighing":
+      case "Quality check":
+      case "Recorded":
         navigate("/officer/weighment");
         return;
-      case "Payment":
-      case "Payment pending":
+      case "Awaiting payment":
         navigate("/officer/payments");
-        return;
-      case "Cleared":
-        onClearFarmer?.(farmer.id);
         return;
       default:
         return;

@@ -1,5 +1,4 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { Slot } from "../Slot";
 
 const QueuePage = ({
@@ -10,9 +9,7 @@ const QueuePage = ({
   onUpdateFarmer,
   onVerifyFarmer,
   onMarkArrived,
-  onClearFarmer,
 }) => {
-  const navigate = useNavigate();
   const today = new Date().toISOString().slice(0, 10);
   const [selectedCrop, setSelectedCrop] = useState("All");
   const [selectedStatus, setSelectedStatus] = useState("Active");
@@ -52,13 +49,6 @@ const QueuePage = ({
     if (selectedCrop === "All") return visibleFarmers;
     return visibleFarmers.filter((farmer) => farmer.crop === selectedCrop);
   }, [selectedCrop, visibleFarmers]);
-
-  const handleClearFarmer = (id) => {
-    const clearedFarmer = onClearFarmer(id);
-    if (clearedFarmer) {
-      navigate("/officer/reports");
-    }
-  };
 
   const headerTitle =
     selectedStatus === "Active" ? "Queue list" : "Cleared today";
@@ -275,7 +265,7 @@ const QueuePage = ({
               farmer={farmer}
               isHighlighted={index === 0 && selectedStatus === "Active"}
               onUpdateFarmer={onUpdateFarmer}
-              onClearFarmer={handleClearFarmer}
+              onMarkArrived={onMarkArrived}
             />
           ))
         )}

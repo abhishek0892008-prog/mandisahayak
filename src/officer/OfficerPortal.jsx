@@ -3,6 +3,9 @@ import { Navigate, NavLink, Route, Routes, useNavigate } from "react-router-dom"
 import { useAuth } from "../auth/context";
 import LanguageToggle from "../components/LanguageToggle";
 import { useFaramqueueState } from "./useFaramqueueState";
+import useOfficerQueue from "./useOfficerQueue";
+import CentrePicker from "../components/CentrePicker";
+import { ErrorState, Loading } from "../components/StateViews";
 import DashboardPage from "./pages/DashboardPage";
 import QueuePage from "./pages/QueuePage";
 import WeighmentPage from "./pages/WeighmentPage";
@@ -39,9 +42,10 @@ function OfficerPortal() {
   const navigate = useNavigate();
   const { farmer, signOut } = useAuth();
 
+  // The operational screens read and write the server.
   const {
+    centre,
     farmers,
-    storage,
     queueStats,
     paymentAlert,
     selectedDate,
@@ -49,16 +53,21 @@ function OfficerPortal() {
     selectedReportFarmerId,
     savedReportFarmerId,
     acknowledgeSavedReport,
-    morningSetup,
-    setMorningSetup,
-    clearFarmer,
+    loading,
+    error,
+    reload,
     saveFarmerReport,
     handleDateChange,
     handlePaymentStatusChange,
     updateFarmer,
     verifyFarmer,
     markFarmerArrived,
-  } = useFaramqueueState();
+  } = useOfficerQueue();
+
+  // Centre configuration and storage have no officer endpoints — they are
+  // admin territory (officer.md §2.1) — so those two screens stay on the
+  // prototype's local state and are labelled as such.
+  const { storage, morningSetup, setMorningSetup } = useFaramqueueState();
 
   async function handleSignOut() {
     await signOut();
@@ -134,6 +143,16 @@ function OfficerPortal() {
           </aside>
 
           <main className="min-w-0 rounded-[30px] border border-[#e7e7e7] bg-[#fafafa] p-3 shadow-[0_8px_18px_rgba(15,25,20,0.04)] sm:p-4 lg:p-6">
+            {centre.centres.length > 1 && (
+              <div className="mb-4">
+                <CentrePicker centre={centre} />
+              </div>
+            )}
+
+            {error && <ErrorState error={error} onRetry={reload} />}
+
+            {loading && <Loading />}
+
             <Routes>
               <Route
                 index
@@ -161,7 +180,6 @@ function OfficerPortal() {
                     onUpdateFarmer={updateFarmer}
                     onVerifyFarmer={verifyFarmer}
                     onMarkArrived={markFarmerArrived}
-                    onClearFarmer={clearFarmer}
                   />
                 }
               />

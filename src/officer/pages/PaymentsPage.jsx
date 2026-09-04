@@ -45,17 +45,18 @@ const PaymentsPage = ({
     [farmers],
   );
 
+  /**
+   * The price is the server's, never this screen's.
+   *
+   * `complete` resolves the MSP rate by crop, season and marketing year and
+   * prices the procurement in the same transaction (officer.md §5). Recomputing
+   * it here from a rate table would produce a second, quietly different number
+   * on the screen the officer pays from.
+   */
   const getPriceBreakdown = (entry) => {
-    const cropRateMap = {
-      Wheat: 2275,
-      Rice: 2225,
-      Mustard: 5650,
-      Gram: 5230,
-    };
-
-    const actualWeight = Number(entry.actualWeight || entry.quantity || 0);
-    const rate = Number(entry.mspRate ?? cropRateMap[entry.crop] ?? 0);
-    const payable = actualWeight * rate;
+    const actualWeight = Number(entry.actualWeight || 0);
+    const rate = Number(entry.mspRate || 0);
+    const payable = Number(entry.paidAmount || 0);
 
     return {
       actualWeight,
