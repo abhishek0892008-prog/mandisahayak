@@ -217,20 +217,22 @@ export async function submitOfficerRegistration(
     );
   }
 
-  const acceptedCrop = await client.query(
-    `SELECT 1 FROM centre_crop_configurations
-      WHERE centre_id = $1 AND crop_id = $2
+  const acceptedCrops = await client.query<{ crop_id: string }>(
+    `SELECT crop_id FROM centre_crop_configurations
+      WHERE centre_id = $1 AND crop_id = ANY($2::uuid[])
         AND is_active = true
         AND effective_from <= CURRENT_DATE
-        AND (effective_to IS NULL OR effective_to >= CURRENT_DATE)
-      LIMIT 1`,
-    [input.centreId, input.cropId],
+        AND (effective_to IS NULL OR effective_to >= CURRENT_DATE)`,
+    [input.centreId, input.cropIds],
   );
 
-  if ((acceptedCrop.rowCount ?? 0) === 0) {
+  const acceptedCropIds = new Set(acceptedCrops.rows.map((row) => row.crop_id));
+  const unaccepted = input.cropIds.filter((id) => !acceptedCropIds.has(id));
+
+  if (unaccepted.length > 0) {
     throw unprocessable(
       ErrorCodes.CROP_NOT_CONFIGURED_AT_CENTRE,
-      "That crop is not accepted at the selected centre.",
+      "One or more selected crops are not accepted at the selected centre.",
     );
   }
 
@@ -287,7 +289,7 @@ export async function submitOfficerRegistration(
     requestId: ctx.requestId,
     metadata: {
       requestedCentreId: input.centreId,
-      cropId: input.cropId,
+      cropIds: input.cropIds,
       approvalRequired: false,
     },
   });

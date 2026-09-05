@@ -59,15 +59,27 @@ const DashboardPage = ({
         .toLowerCase();
 
     const normalizedQuery = normalizeValue(query);
+    if (!normalizedQuery) return null;
+
+    // Exact matches first, so a short token like "2" never gets shadowed by
+    // some other farmer's phone number happening to contain a "2".
+    const exactMatch = farmers.find((entry) => {
+      const tokenValue = normalizeValue(entry.token);
+      const phoneValue = normalizeValue(entry.phone);
+      return tokenValue === normalizedQuery || phoneValue === normalizedQuery;
+    });
+    if (exactMatch) return exactMatch;
+
+    // Partial matching only kicks in once the query is specific enough
+    // (4+ digits/letters) to avoid matching against almost every phone number.
+    if (normalizedQuery.length < 4) return null;
 
     return (
       farmers.find((entry) => {
         const tokenValue = normalizeValue(entry.token);
         const phoneValue = normalizeValue(entry.phone);
         return (
-          tokenValue === normalizedQuery ||
           tokenValue.includes(normalizedQuery) ||
-          phoneValue === normalizedQuery ||
           phoneValue.includes(normalizedQuery)
         );
       }) ?? null
@@ -275,7 +287,7 @@ const DashboardPage = ({
           </div>
         </div>
 
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-stretch">
           <input
             value={dashboardSearch}
             onChange={(event) => setDashboardSearch(event.target.value)}

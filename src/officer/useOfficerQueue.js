@@ -128,6 +128,8 @@ export function useOfficerQueue() {
           name: row.farmer?.name ?? "",
           phone: row.farmer?.phone ?? "",
           slot: formatTime(row.scheduledStartAt, centre.timezone, locale) ?? "",
+          scheduledStartAt: row.scheduledStartAt ?? null,
+          laneNo: row.laneNo ?? null,
           crop: row.crop?.name ?? "",
           quantity: quintal(row.requestedQuantityKg),
           landArea: row.farmer?.village ?? "",

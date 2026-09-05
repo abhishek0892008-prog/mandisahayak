@@ -27,7 +27,7 @@ function OfficerRegistration() {
   const [phone, setPhone] = useState("");
   const [districtId, setDistrictId] = useState("");
   const [centreId, setCentreId] = useState("");
-  const [cropId, setCropId] = useState("");
+  const [cropIds, setCropIds] = useState([]);
   const [consent, setConsent] = useState(false);
 
   const [fieldErrors, setFieldErrors] = useState({});
@@ -46,8 +46,21 @@ function OfficerRegistration() {
   );
 
   const centreOptions = centres.data ?? [];
-  const selectedCentre = centreOptions.find((centre) => centre.id === centreId);
-  const acceptedCrops = selectedCentre?.acceptedCrops ?? [];
+
+  // The same crop catalog a farmer picks from when booking a slot — not
+  // narrowed to one centre's configured list, so an officer can register for
+  // every crop they handle.
+  const crops = useApiResource((signal) => api.crops(signal), []);
+  const cropOptions = crops.data ?? [];
+
+  function toggleCrop(id) {
+    setCropIds((previous) =>
+      previous.includes(id)
+        ? previous.filter((entry) => entry !== id)
+        : [...previous, id],
+    );
+    clearFieldError("cropIds");
+  }
 
   function clearFieldError(field) {
     setFieldErrors((previous) => {
@@ -78,8 +91,8 @@ function OfficerRegistration() {
       errors.centreId = t("codes.fieldErrors.CENTRE_ID_INVALID");
     }
 
-    if (!cropId) {
-      errors.cropId = t("codes.fieldErrors.CROP_ID_INVALID");
+    if (cropIds.length === 0) {
+      errors.cropIds = t("codes.fieldErrors.CROP_ID_INVALID");
     }
 
     if (!consent) {
@@ -109,7 +122,7 @@ function OfficerRegistration() {
         phone: `+91${phone}`,
         districtId,
         centreId,
-        cropId,
+        cropIds,
         consent: { policyVersion: CONSENT_POLICY_VERSION, accepted: true },
       });
 
@@ -303,8 +316,8 @@ function OfficerRegistration() {
                 </h2>
 
                 <p className="mt-1 text-xs leading-5 text-slate-400">
-                  Select your district, procurement centre, and an accepted
-                  crop.
+                  Select your district, procurement centre, and the crops you
+                  handle.
                 </p>
 
                 <div className="mt-5 grid gap-5 sm:grid-cols-2">
@@ -323,19 +336,18 @@ function OfficerRegistration() {
                       onChange={(event) => {
                         setDistrictId(event.target.value);
                         /*
-                         * The whole chain below this is now stale: a centre
-                         * belongs to one district, and a crop to one centre.
-                         * Clearing the select's OPTIONS is not enough — the
-                         * <select> shows blank because no option matches, but
-                         * the state still holds the previous id and would be
-                         * submitted, which the server correctly rejects with
-                         * CENTRE_NOT_IN_DISTRICT / CROP_NOT_CONFIGURED_AT_CENTRE.
+                         * The centre belongs to one district, so the previous
+                         * choice cannot survive a change of district. Clearing
+                         * the select's OPTIONS is not enough — the <select>
+                         * shows blank because no option matches, but the state
+                         * still holds the previous id and would be submitted,
+                         * which the server correctly rejects with
+                         * CENTRE_NOT_IN_DISTRICT. Crop choices are independent
+                         * of centre, so they are left as they are.
                          */
                         setCentreId("");
-                        setCropId("");
                         clearFieldError("districtId");
                         clearFieldError("centreId");
-                        clearFieldError("cropId");
                       }}
                       className={inputClasses(
                         fieldErrors.districtId || districts.error,
@@ -390,11 +402,7 @@ function OfficerRegistration() {
                       disabled={!districtId || centres.loading}
                       onChange={(event) => {
                         setCentreId(event.target.value);
-                        // Crops are per centre, so the previous choice cannot
-                        // survive a change of centre. See the district note.
-                        setCropId("");
                         clearFieldError("centreId");
-                        clearFieldError("cropId");
                       }}
                       className={inputClasses(
                         fieldErrors.centreId || centres.error,
@@ -446,41 +454,47 @@ function OfficerRegistration() {
                       </p>
                     )}
                   </div>
+                </div>
 
-                  <div>
-                    <label
-                      htmlFor="cropId"
-                      className="mb-2 block text-sm font-bold text-slate-700"
-                    >
-                      {t("crop")}
-                    </label>
+                <div className="mt-5">
+                  <label className="mb-2 block text-sm font-bold text-slate-700">
+                    {t("cropsAccepted")}
+                  </label>
 
-                    <select
-                      id="cropId"
-                      value={cropId}
-                      disabled={!centreId || centres.loading}
-                      onChange={(event) => {
-                        setCropId(event.target.value);
-                        clearFieldError("cropId");
-                      }}
-                      className={inputClasses(fieldErrors.cropId)}
+                  {crops.loading ? (
+                    <p className="text-xs text-slate-400">{t("loading")}</p>
+                  ) : cropOptions.length === 0 ? (
+                    <p className="text-xs text-slate-400">
+                      {t("noCropsAtCentre")}
+                    </p>
+                  ) : (
+                    <div
+                      className={`grid grid-cols-2 gap-2 rounded-xl border p-3 sm:grid-cols-3 ${
+                        fieldErrors.cropIds ? "border-red-400" : "border-slate-200"
+                      }`}
                     >
-                      <option value="">
-                        {!centreId ? t("selectCentreFirst") : t("selectCrop")}
-                      </option>
-                      {acceptedCrops.map((crop) => (
-                        <option key={crop.id} value={crop.id}>
-                          {crop.name}
-                        </option>
+                      {cropOptions.map((crop) => (
+                        <label
+                          key={crop.id}
+                          className="flex items-center gap-2 text-sm font-medium text-slate-700"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={cropIds.includes(crop.id)}
+                            onChange={() => toggleCrop(crop.id)}
+                            className="h-4 w-4 accent-[#11a255]"
+                          />
+                          {crop.canonicalName}
+                        </label>
                       ))}
-                    </select>
+                    </div>
+                  )}
 
-                    {fieldErrors.cropId && (
-                      <p className="mt-2 text-xs font-medium text-red-500">
-                        {fieldErrors.cropId}
-                      </p>
-                    )}
-                  </div>
+                  {fieldErrors.cropIds && (
+                    <p className="mt-2 text-xs font-medium text-red-500">
+                      {fieldErrors.cropIds}
+                    </p>
+                  )}
                 </div>
               </div>
 

@@ -1,12 +1,7 @@
 import { useMemo, useState } from "react";
 import { Slot } from "../Slot";
 
-const QueuePage = ({
-  farmers,
-  morningSetup,
-  onUpdateFarmer,
-  onMarkArrived,
-}) => {
+const QueuePage = ({ farmers, morningSetup, onMarkArrived }) => {
   const [selectedCrop, setSelectedCrop] = useState("All");
   const [selectedStatus, setSelectedStatus] = useState("Active");
 
@@ -32,6 +27,11 @@ const QueuePage = ({
 
   const headerTitle =
     selectedStatus === "Active" ? "Queue list" : "Cleared today";
+
+  const nextSlotFarmer = useMemo(
+    () => filteredFarmers.find((farmer) => farmer.status === "Queued"),
+    [filteredFarmers],
+  );
 
   return (
     <div className="space-y-5">
@@ -117,7 +117,7 @@ const QueuePage = ({
             Next slot
           </p>
           <p className="mt-2 text-3xl font-black text-slate-900">
-            {filteredFarmers[0]?.slot ?? "N/A"}
+            {nextSlotFarmer?.slot ?? "N/A"}
           </p>
         </div>
       </div>
@@ -139,7 +139,6 @@ const QueuePage = ({
               key={farmer.id}
               farmer={farmer}
               isHighlighted={index === 0 && selectedStatus === "Active"}
-              onUpdateFarmer={onUpdateFarmer}
               onMarkArrived={onMarkArrived}
             />
           ))

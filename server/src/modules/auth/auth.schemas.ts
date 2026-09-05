@@ -117,7 +117,9 @@ export const StaffRegisterSchema = z.object({
   phone: PhoneSchema,
   districtId: z.string().uuid("DISTRICT_ID_INVALID"),
   centreId: z.string().uuid("CENTRE_ID_INVALID"),
-  cropId: z.string().uuid("CROP_ID_INVALID"),
+  cropIds: z
+    .array(z.string().uuid("CROP_ID_INVALID"))
+    .min(1, "CROP_ID_INVALID"),
   consent: ConsentSchema,
 });
 export type StaffRegisterInput = z.infer<typeof StaffRegisterSchema>;

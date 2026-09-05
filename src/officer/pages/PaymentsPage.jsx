@@ -11,17 +11,14 @@ const PaymentsPage = ({
   const navigate = useNavigate();
   const [expandedId, setExpandedId] = useState(null);
 
+  // Only a booking the server has actually priced and moved to
+  // "Awaiting payment" can be paid — anything earlier (Weighing, Quality
+  // check, Recorded) has no payment row yet, so marking it "Cleared" here
+  // fails with INVALID_STATE_TRANSITION on the server.
   const activePayments = useMemo(
     () =>
       farmers
-        .filter(
-          (farmer) =>
-            (farmer.paidAmount ||
-              farmer.paymentStatus ||
-              farmer.status === "Cleared") &&
-            farmer.paymentStatus !== "Cleared" &&
-            farmer.status !== "Cleared",
-        )
+        .filter((farmer) => farmer.status === "Awaiting payment")
         .sort(
           (a, b) =>
             (a.date || "").localeCompare(b.date || "") ||
