@@ -74,7 +74,8 @@ describe("OfficerPortal", () => {
     expect(await screen.findByText("Suresh Yadav")).toBeInTheDocument();
 
     // 3000 kg is 30 quintal. The screen speaks quintal; the wire speaks kg.
-    expect(screen.getByDisplayValue("30")).toBeInTheDocument();
+    // Quantity is booking data, read-only on the queue card, not an input.
+    expect(screen.getByText("30")).toBeInTheDocument();
     expect(screen.getByText("Namaste, Ramesh Sharma")).toBeInTheDocument();
   });
 
