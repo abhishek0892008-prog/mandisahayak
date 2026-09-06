@@ -333,14 +333,20 @@ export function useOfficerQueue() {
 
   const handlePaymentStatusChange = useCallback(
     async (bookingCode, nextStatus) => {
-      if (nextStatus !== "Cleared") return null;
+      const statusMap = {
+        "Processing": "INITIATED",
+        "Cleared": "PAID",
+      };
+
+      const backendStatus = statusMap[nextStatus];
+      if (!backendStatus) return null;
 
       const result = await run(
-        () => api.officerSetPaymentStatus(bookingCode, "PAID"),
-        "Payment marked paid.",
+        () => api.officerSetPaymentStatus(bookingCode, backendStatus),
+        `Payment marked ${nextStatus.toLowerCase()}.`,
       );
 
-      if (result) {
+      if (result && nextStatus === "Cleared") {
         setSelectedReportFarmerId(bookingCode);
         setSavedReportFarmerId(bookingCode);
       }
