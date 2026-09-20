@@ -138,8 +138,15 @@ unsourced OFFICIAL row, a tampered audit row), reports one line per check, and
 ## Run
 
 ```bash
+cp .env.example .env    # PowerShell: Copy-Item .env.example .env
+# Edit .env: set DATABASE_URL and unique OTP/SESSION/CSRF peppers.
+npm install
 npm start                # node src/index.ts
 ```
+
+`.env` is intentionally ignored by Git, so a fresh clone contains only
+`.env.example`. The server will refuse to boot until the copied file contains
+the required database URL and peppers.
 
 The server refuses to start if any route declares no permission, so "I forgot to
 protect the endpoint" is a boot failure rather than a security incident.

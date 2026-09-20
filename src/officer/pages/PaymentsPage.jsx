@@ -10,6 +10,9 @@ const PaymentsPage = ({
 }) => {
   const navigate = useNavigate();
   const [expandedId, setExpandedId] = useState(null);
+  const [paymentReferences, setPaymentReferences] = useState({});
+  const [referenceErrors, setReferenceErrors] = useState({});
+  const [transitionErrors, setTransitionErrors] = useState({});
 
   // Only a booking the server has actually priced and moved to
   // "Awaiting payment" can be paid — anything earlier (Weighing, Quality
@@ -18,11 +21,11 @@ const PaymentsPage = ({
   const activePayments = useMemo(
     () =>
       farmers
-        .filter((farmer) => farmer.status === "Awaiting payment")
+        .filter((farmer) => farmer.apiStatus === "PAYMENT_PENDING")
         .sort(
           (a, b) =>
             (a.date || "").localeCompare(b.date || "") ||
-            Number(a.id) - Number(b.id),
+            String(a.id).localeCompare(String(b.id)),
         ),
     [farmers],
   );
@@ -32,12 +35,13 @@ const PaymentsPage = ({
       farmers
         .filter(
           (farmer) =>
-            farmer.paymentStatus === "Cleared" || farmer.status === "Cleared",
+            farmer.paymentStatus === "Cleared" ||
+            farmer.apiStatus === "COMPLETED",
         )
         .sort(
           (a, b) =>
             (a.date || "").localeCompare(b.date || "") ||
-            Number(a.id) - Number(b.id),
+            String(a.id).localeCompare(String(b.id)),
         ),
     [farmers],
   );
@@ -62,10 +66,38 @@ const PaymentsPage = ({
     };
   };
 
-  const handlePaymentStatusChange = (id, status) => {
-    onPaymentStatusChange?.(id, status);
+  const handlePaymentStatusChange = async (id, status) => {
+    const entry = farmers.find((farmer) => farmer.id === id);
+    const currentStatus = entry?.paymentStatus ?? "Pending";
 
-    if (status === "Cleared") {
+    if (status === "Cleared" && currentStatus !== "Processing") {
+      setTransitionErrors((current) => ({
+        ...current,
+        [id]: "Move this payment to Processing before marking it cleared.",
+      }));
+      return;
+    }
+
+    const paymentReference = paymentReferences[id]?.trim() ?? "";
+
+    if (status === "Cleared" && !paymentReference) {
+      setReferenceErrors((current) => ({
+        ...current,
+        [id]: "Enter the transfer reference before clearing this payment.",
+      }));
+      return;
+    }
+
+    const result = await onPaymentStatusChange?.(id, status, paymentReference);
+
+    setTransitionErrors((current) => {
+      if (!current[id]) return current;
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+
+    if (result && status === "Cleared") {
       navigate("/officer/reports");
     }
   };
@@ -185,6 +217,47 @@ const PaymentsPage = ({
                           </button>
                         );
                       })}
+                    </div>
+
+                    <div className="mt-4">
+                      <label
+                        htmlFor={`payment-reference-${entry.id}`}
+                        className="block text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700"
+                      >
+                        Payment reference / cash receipt number
+                      </label>
+                      <input
+                        id={`payment-reference-${entry.id}`}
+                        type="text"
+                        value={paymentReferences[entry.id] ?? ""}
+                        onChange={(event) =>
+                          (() => {
+                            setPaymentReferences((current) => ({
+                              ...current,
+                              [entry.id]: event.target.value,
+                            }));
+                            setReferenceErrors((current) => {
+                              if (!current[entry.id]) return current;
+                              const next = { ...current };
+                              delete next[entry.id];
+                              return next;
+                            });
+                          })()
+                        }
+                        placeholder="Enter UTR or cash receipt number"
+                        className="mt-2 min-h-11 w-full rounded-xl border border-emerald-200 bg-white px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:ring-4 focus:ring-emerald-50"
+                      />
+                      <p
+                        className={`mt-1 text-xs ${referenceErrors[entry.id] ? "font-semibold text-red-600" : "text-slate-500"}`}
+                      >
+                        {referenceErrors[entry.id] ??
+                          "Required before marking this payment cleared."}
+                      </p>
+                      {transitionErrors[entry.id] && (
+                        <p className="mt-1 text-xs font-semibold text-red-600">
+                          {transitionErrors[entry.id]}
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}

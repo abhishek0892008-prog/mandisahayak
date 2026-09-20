@@ -291,6 +291,7 @@ describe("demo OTP arrives with the challenge", () => {
 
     expect(screen.queryByText(/Demo mode . use this OTP/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/No SMS is sent/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/No demo OTP is available for this number/i)).toBeInTheDocument();
   });
 });
 

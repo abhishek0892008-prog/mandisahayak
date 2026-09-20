@@ -47,16 +47,16 @@ const WeighmentPage = ({ farmers = [], onUpdateFarmer, onSaveReport }) => {
     onUpdateFarmer?.(selectedFarmer.id, field, value);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!selectedFarmer) return;
 
-    onSaveReport?.(selectedFarmer.id, {
+    await onSaveReport?.(selectedFarmer.id, {
+      grossWeight: selectedFarmer.grossWeight ?? "",
       actualWeight: String(netWeight || 0),
       lateMinutes: selectedFarmer.lateMinutes ?? "",
       paymentStatus: "Pending",
     });
 
-    setSelectedFarmerId(null);
   };
 
   if (!selectedFarmer) {
@@ -137,7 +137,9 @@ const WeighmentPage = ({ farmers = [], onUpdateFarmer, onSaveReport }) => {
             </h3>
           </div>
           <span className="rounded-full bg-white px-3 py-1.5 text-xs font-bold uppercase tracking-[0.12em] text-emerald-800">
-            {selectedFarmer.token}
+            {selectedFarmer.apiStatus === "QUALITY_CHECK"
+              ? "Quality check required"
+              : selectedFarmer.token}
           </span>
         </div>
 
@@ -218,7 +220,9 @@ const WeighmentPage = ({ farmers = [], onUpdateFarmer, onSaveReport }) => {
           onClick={handleSave}
           className="rounded-full bg-green-700 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-emerald-200 hover:bg-green-800"
         >
-          ⚖️ Save weighment report
+          {selectedFarmer.apiStatus === "QUALITY_CHECK"
+            ? "✅ Save quality and accepted weight"
+            : "⚖️ Save gross weight"}
         </button>
       </div>
 

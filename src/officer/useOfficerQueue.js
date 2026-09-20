@@ -148,7 +148,12 @@ export function useOfficerQueue() {
               : String(Number(payment.ratePerQuintalPaise) / 100),
           paymentBlockedReason: payment?.blockedReason ?? "",
           lateMinutes: "",
-          paymentStatus: payment?.status === "PAID" ? "Cleared" : "Pending",
+          paymentStatus:
+            payment?.status === "PAID"
+              ? "Cleared"
+              : payment?.status === "INITIATED"
+                ? "Processing"
+                : "Pending",
           reportSaved: row.status === "COMPLETED",
           rejectionReason: procurement?.rejectionReason ?? "",
           quality: {
@@ -332,7 +337,7 @@ export function useOfficerQueue() {
   );
 
   const handlePaymentStatusChange = useCallback(
-    async (bookingCode, nextStatus) => {
+    async (bookingCode, nextStatus, paymentReference) => {
       const statusMap = {
         "Processing": "INITIATED",
         "Cleared": "PAID",
@@ -342,7 +347,12 @@ export function useOfficerQueue() {
       if (!backendStatus) return null;
 
       const result = await run(
-        () => api.officerSetPaymentStatus(bookingCode, backendStatus),
+        () =>
+          api.officerSetPaymentStatus(
+            bookingCode,
+            backendStatus,
+            paymentReference,
+          ),
         `Payment marked ${nextStatus.toLowerCase()}.`,
       );
 

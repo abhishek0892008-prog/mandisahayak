@@ -315,6 +315,7 @@
   "otpDigit": "OTP digit",
   "demoOtpFill": "Fill this code",
   "demoOtpNote": "Shown because the server is running in demo mode. No SMS is sent.",
+  "demoOtpUnavailable": "No demo OTP is available for this number. Register a new farmer first, or use an active demo farmer account.",
   "searchCrop": "Search crop (English or Hindi)",
   "noCropsMatch": "No crop matches that search.",
   "selectCropFirst": "Select a crop first",

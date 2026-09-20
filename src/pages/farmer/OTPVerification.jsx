@@ -99,6 +99,11 @@ function OTPVerification() {
   );
 
   const demoOtpCode = challenge?.devOtp ?? (DEMO_OTP_ENABLED ? demoOtp.data : null);
+  const demoOtpUnavailable =
+    DEMO_OTP_ENABLED &&
+    !challenge?.devOtp &&
+    !demoOtp.loading &&
+    demoOtp.data === null;
 
   if (!challenge) {
     return (
@@ -343,6 +348,14 @@ function OTPVerification() {
                 >
                   {t("demoOtpFill")}
                 </button>
+              </div>
+            )}
+
+            {demoOtpUnavailable && (
+              <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-3 text-center">
+                <p className="text-xs font-semibold text-slate-600">
+                  {t("demoOtpUnavailable")}
+                </p>
               </div>
             )}
 
