@@ -3,7 +3,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import api from "../lib/api";
 import useApiResource from "../hooks/useApiResource";
 import useOfficerCentre from "../hooks/useOfficerCentre";
-import { formatTime, kgToQuintal, quintalToKg, todayInZone } from "../lib/format";
+import {
+  formatTime,
+  kgToQuintal,
+  quintalToKg,
+  todayInZone,
+} from "../lib/format";
 
 /**
  * The officer screens, backed by the server.
@@ -339,8 +344,8 @@ export function useOfficerQueue() {
   const handlePaymentStatusChange = useCallback(
     async (bookingCode, nextStatus, paymentReference) => {
       const statusMap = {
-        "Processing": "INITIATED",
-        "Cleared": "PAID",
+        Processing: "INITIATED",
+        Cleared: "PAID",
       };
 
       const backendStatus = statusMap[nextStatus];

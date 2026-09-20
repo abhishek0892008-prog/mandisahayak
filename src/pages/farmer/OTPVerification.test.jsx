@@ -113,7 +113,9 @@ describe("OTP screen renders the length the server issued", () => {
   it("pastes a four-digit code and submits it", async () => {
     const user = userEvent.setup();
     const api = mockApi(
-      routes({ "POST /auth/otp/verify": created({ userId: fixtures.me.userId }) }),
+      routes({
+        "POST /auth/otp/verify": created({ userId: fixtures.me.userId }),
+      }),
     );
 
     renderOtp(challengeOf(4));
@@ -136,7 +138,9 @@ describe("OTP screen renders the length the server issued", () => {
   it("submits on its own as soon as the last digit is entered", async () => {
     const user = userEvent.setup();
     const api = mockApi(
-      routes({ "POST /auth/otp/verify": created({ userId: fixtures.me.userId }) }),
+      routes({
+        "POST /auth/otp/verify": created({ userId: fixtures.me.userId }),
+      }),
     );
 
     renderOtp(challengeOf(4));
@@ -170,7 +174,9 @@ describe("OTP screen renders the length the server issued", () => {
 
   it("clears the boxes on a rejected code and does not resubmit it", async () => {
     const user = userEvent.setup();
-    const api = mockApi(routes({ "POST /auth/otp/verify": fail(400, "OTP_INVALID") }));
+    const api = mockApi(
+      routes({ "POST /auth/otp/verify": fail(400, "OTP_INVALID") }),
+    );
 
     renderOtp(challengeOf(4));
     await waitFor(() => expect(boxes()).toHaveLength(4));
@@ -213,7 +219,10 @@ describe("demo OTP arrives with the challenge", () => {
     // Above the boxes, so it is read before they are filled.
     const panel = screen.getByText("4821");
     const firstBox = screen.getAllByRole("textbox", { name: /OTP digit/i })[0];
-    expect(panel.compareDocumentPosition(firstBox) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      panel.compareDocumentPosition(firstBox) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("needs no second request when the challenge already carries the code", async () => {
@@ -232,7 +241,9 @@ describe("demo OTP arrives with the challenge", () => {
     await waitFor(() => expect(screen.getByText("4821")).toBeInTheDocument());
 
     // The demo still exercises the real typing path.
-    const values = screen.getAllByRole("textbox", { name: /OTP digit/i }).map((b) => b.value);
+    const values = screen
+      .getAllByRole("textbox", { name: /OTP digit/i })
+      .map((b) => b.value);
     expect(values).toEqual(["", "", "", ""]);
   });
 
@@ -247,7 +258,10 @@ describe("demo OTP arrives with the challenge", () => {
 
     // Deliberately type a DIFFERENT code from the one on screen.
     for (const [i, d] of [..."1111"].entries()) {
-      await user.type(screen.getAllByRole("textbox", { name: /OTP digit/i })[i], d);
+      await user.type(
+        screen.getAllByRole("textbox", { name: /OTP digit/i })[i],
+        d,
+      );
     }
     await user.click(screen.getByRole("button", { name: /Verify/i }));
 
@@ -261,14 +275,19 @@ describe("demo OTP arrives with the challenge", () => {
   it("verifies when the user types the displayed code", async () => {
     const user = userEvent.setup();
     const api = mockApi(
-      routes({ "POST /auth/otp/verify": created({ userId: fixtures.me.userId }) }),
+      routes({
+        "POST /auth/otp/verify": created({ userId: fixtures.me.userId }),
+      }),
     );
 
     renderOtp({ ...challengeOf(4), devOtp: "4821" });
     await waitFor(() => expect(screen.getByText("4821")).toBeInTheDocument());
 
     for (const [i, d] of [..."4821"].entries()) {
-      await user.type(screen.getAllByRole("textbox", { name: /OTP digit/i })[i], d);
+      await user.type(
+        screen.getAllByRole("textbox", { name: /OTP digit/i })[i],
+        d,
+      );
     }
     await user.click(screen.getByRole("button", { name: /Verify/i }));
 
@@ -286,12 +305,18 @@ describe("demo OTP arrives with the challenge", () => {
 
     renderOtp(challengeOf(4));
     await waitFor(() => {
-      expect(screen.getAllByRole("textbox", { name: /OTP digit/i })).toHaveLength(4);
+      expect(
+        screen.getAllByRole("textbox", { name: /OTP digit/i }),
+      ).toHaveLength(4);
     });
 
-    expect(screen.queryByText(/Demo mode . use this OTP/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/Demo mode . use this OTP/i),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText(/No SMS is sent/i)).not.toBeInTheDocument();
-    expect(screen.getByText(/No demo OTP is available for this number/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/No demo OTP is available for this number/i),
+    ).toBeInTheDocument();
   });
 });
 
@@ -305,7 +330,8 @@ describe("demo OTP is visible on screen when demo mode is on", () => {
 
     const { default: DemoOtpScreen } = await import("./OTPVerification");
     const { renderScreen: renderFresh } = await import("../../test/render");
-    const { mockApi: freshMockApi, fail: freshFail } = await import("../../test/server");
+    const { mockApi: freshMockApi, fail: freshFail } =
+      await import("../../test/server");
 
     const user = userEvent.setup();
     const api = freshMockApi({

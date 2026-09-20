@@ -9,8 +9,7 @@ const WeighmentPage = ({ farmers = [], onUpdateFarmer, onSaveReport }) => {
         (farmer) =>
           ["Arrived", "Weighing", "Quality check", "Recorded"].includes(
             farmer.status,
-          ) &&
-          !farmer.reportSaved,
+          ) && !farmer.reportSaved,
       ),
     [farmers],
   );
@@ -56,7 +55,6 @@ const WeighmentPage = ({ farmers = [], onUpdateFarmer, onSaveReport }) => {
       lateMinutes: selectedFarmer.lateMinutes ?? "",
       paymentStatus: "Pending",
     });
-
   };
 
   if (!selectedFarmer) {

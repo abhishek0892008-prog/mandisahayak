@@ -98,7 +98,8 @@ function OTPVerification() {
     },
   );
 
-  const demoOtpCode = challenge?.devOtp ?? (DEMO_OTP_ENABLED ? demoOtp.data : null);
+  const demoOtpCode =
+    challenge?.devOtp ?? (DEMO_OTP_ENABLED ? demoOtp.data : null);
   const demoOtpUnavailable =
     DEMO_OTP_ENABLED &&
     !challenge?.devOtp &&
